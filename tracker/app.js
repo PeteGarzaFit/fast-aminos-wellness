@@ -218,16 +218,16 @@ function setupScreen() {
 
 function loginScreen() {
   if (S.authStep === "code") {
-    return `<section class="auth"><div class="kicker">Check your email</div><h1>Enter your code</h1>
-    <p>We sent a sign-in code to <b>${esc(S.authEmail)}</b>. It can take a minute to arrive. You can also tap the link in that email.</p>
-    <form id="fCode" novalidate><div class="field"><label for="a-code">Sign-in code</label><input id="a-code" class="code-in" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10"></div>
+    return `<section class="auth"><div class="kicker">Check your email</div><h1>Tap the link in your email</h1>
+    <p>We sent a sign-in email to <b>${esc(S.authEmail)}</b>. It can take a minute to arrive. Tap the link in it on this device, or enter the code if the email shows one.</p>
+    <form id="fCode" novalidate><div class="field"><label for="a-code">Sign-in code (if your email has one)</label><input id="a-code" class="code-in" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10"></div>
     <div class="err" id="aErr"></div><button class="btn primary wide" id="aVerify" type="submit">Sign in</button></form>
     <button class="linkbtn" id="aBack" type="button">Use a different email</button></section>`;
   }
   return `<section class="auth"><div class="kicker">Client progress tracker</div><h1>Track your progress with ${esc(TRAINER)}</h1>
-  <p>Sign in with the email you gave your trainer. We'll email you a one-time code. There's no password to remember.</p>
+  <p>Sign in with the email you gave your trainer. We'll email you a sign-in link. There's no password to remember.</p>
   <form id="fEmail" novalidate><div class="field"><label for="a-email">Email</label><input id="a-email" type="email" autocomplete="email" inputmode="email" value="${esc(S.authEmail)}"></div>
-  <div class="err" id="aErr"></div><button class="btn primary wide" id="aSend" type="submit">Email me a code</button></form></section>`;
+  <div class="err" id="aErr"></div><button class="btn primary wide" id="aSend" type="submit">Email me a sign-in link</button></form></section>`;
 }
 function wireLogin() {
   const fe = $("#fEmail"), fc = $("#fCode");
@@ -238,7 +238,7 @@ function wireLogin() {
     btn.disabled = true; btn.textContent = "Sending…"; err.textContent = "";
     const redirect = location.origin + location.pathname;
     const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: redirect, shouldCreateUser: true } });
-    btn.disabled = false; btn.textContent = "Email me a code";
+    btn.disabled = false; btn.textContent = "Email me a sign-in link";
     if (error) { err.textContent = error.status === 429 ? "Too many sign-in emails. Wait a minute, then try again." : "Couldn't send the email. Check the address and try again."; return; }
     S.authEmail = email; S.authStep = "code"; store.set("fa_email", email); render(); setTimeout(() => $("#a-code")?.focus(), 50);
   };
@@ -575,7 +575,7 @@ async function boot() {
   }
   if (!CONFIGURED) { S.screen = "setup"; render(); return; }
   if (!window.supabase || !window.supabase.createClient) { banner("Couldn't load the sign-in service. Check your connection and reload."); S.screen = "setup"; render(); return; }
-  sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+  sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: "implicit" } });
   api = supaApi(sb);
   sb.auth.onAuthStateChange((_ev, session) => { setTimeout(() => onSession(session), 0); });
   const { data } = await sb.auth.getSession();

@@ -18,23 +18,36 @@ Supabase dashboard → **SQL Editor** → **New query**. Paste all of
 - **Redirect URLs:** add `https://fastaminoswellness.com/tracker/` and
   `https://www.fastaminoswellness.com/tracker/`
 
-### 3. Put the sign-in code in the emails
-Clients sign in with a 6-digit code. The code works inside the home-screen app;
-a link in the email opens the phone's browser instead.
+### 3. Sign-in emails
+Clients sign in by tapping a link Supabase emails them. That works right away with
+Supabase's built-in email, which is fine for trying it with a few clients.
 
-**Authentication → Emails (Email Templates)**. Edit **Magic Link** and
-**Confirm signup** so each includes the code. For example:
+**Recommended before rolling out (needed for iPhone home-screen use):** connect your own
+email sender. Supabase's built-in sender only allows a few emails per hour, and on
+free projects it doesn't let you edit the email templates.
+
+1. Create a free account at resend.com (3,000 emails a month) and verify
+   `fastaminoswellness.com` there.
+2. Supabase → **Authentication → Emails → SMTP Settings**: turn on custom SMTP and
+   enter Resend's details (host `smtp.resend.com`, port `465`, user `resend`,
+   password = your Resend API key, sender e.g. `tracker@fastaminoswellness.com`).
+3. **Authentication → Emails → Templates**: edit **Magic Link** and
+   **Confirm signup** so each shows a 6-digit code as well as the link:
 
 ```html
-<h2>Your FAST AMINOS WELLNESS sign-in code</h2>
+<h2>Your FAST AMINOS WELLNESS sign-in</h2>
 <p>Enter this code in the Progress Tracker:</p>
 <p style="font-size:28px;font-weight:bold;letter-spacing:4px">{{ .Token }}</p>
 <p>Or <a href="{{ .ConfirmationURL }}">tap here to sign in</a>.</p>
 ```
 
+Why the code matters: on iPhone, an app added to the home screen keeps its own
+sign-in, separate from Safari. Tapping an email link signs the client in to Safari,
+not the home-screen app. Typing the code signs in the app itself.
+
 ### 4. Add the public key
-Project Settings → **API** (or **API Keys**). Copy the **anon / publishable** key
-into `tracker/config.js` as `supabaseAnonKey`. Never use the `service_role` or
+Project Settings → **API Keys**. Copy the **publishable** key (`sb_publishable_...`),
+or the legacy **anon public** key, into `tracker/config.js` as `supabaseAnonKey`. Never use the `service_role` or
 secret key.
 
 ### 5. Make yourself the trainer
@@ -59,11 +72,6 @@ Reload the tracker. You'll see **Add client**.
    - Android: menu (⋮) → **Add to Home screen** or **Install app**
 4. They log weekly check-ins at home. Only you can enter Omron readings.
 5. Recalibrate with a new Omron reading every 4–6 weeks.
-
-## Before inviting many clients
-Supabase's built-in email sender only allows a few emails per hour. Before you
-roll this out widely, connect your own sender (for example Resend or Postmark)
-under **Project Settings → Authentication → SMTP Settings**.
 
 ## Privacy
 - Each client sees only their own records and photos. The rules are in

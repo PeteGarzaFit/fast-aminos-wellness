@@ -5,6 +5,6 @@
 // Never put the service_role or secret key here.
 window.TRACKER_CONFIG = {
   supabaseUrl: "https://zfkhkdkibuwpigpvsmkd.supabase.co",
-  supabaseAnonKey: "PASTE_ANON_KEY_HERE",
+  supabaseAnonKey: "sb_publishable_gqGqZmz4nmN49Z8IxyhCWQ_MRA7tGFD",
   trainerName: "Pete"
 };

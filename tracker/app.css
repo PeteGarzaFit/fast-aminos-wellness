@@ -163,3 +163,6 @@ dialog h3{font-family:var(--serif);font-size:28px;margin:0;font-weight:500;lette
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:#fff;border-radius:12px;padding:10px 16px;font-size:14px;z-index:50;max-width:calc(100vw - 32px);box-shadow:0 12px 30px rgba(16,24,40,.25)}
 .skel{height:200px;border-radius:18px;background:var(--grid)}
 @media (prefers-reduced-motion:no-preference){.skel{animation:pulse 1.4s ease-in-out infinite}@keyframes pulse{50%{opacity:.55}}}
+details.codealt{font-size:14px}
+details.codealt summary{cursor:pointer;color:var(--blue);font-weight:600}
+details.codealt form{margin-top:10px}

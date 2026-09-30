@@ -173,6 +173,7 @@ const DEMO = params.has("demo");
 const DEMO_CLIENT = params.get("demo") === "client";
 const CONFIGURED = !!(CFG.supabaseUrl && CFG.supabaseAnonKey && !/PASTE/.test(CFG.supabaseAnonKey));
 const TRAINER = CFG.trainerName || "your trainer";
+const IS_HOME_APP = window.navigator.standalone === true || (window.matchMedia && matchMedia("(display-mode: standalone)").matches);
 let sb = null, api = null;
 const S = { me: null, isTrainer: false, clients: [], sel: null, checkins: [], urls: {}, screen: "loading", metric: "bf", view: "front", cmpA: null, cmpB: null, overlay: false, fade: 50, authEmail: "", authStep: "email" };
 const store = { get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (_) {} } };
@@ -218,10 +219,16 @@ function setupScreen() {
 
 function loginScreen() {
   if (S.authStep === "code") {
+    const codeForm = `<form id="fCode" novalidate><div class="field"><label for="a-code">6-digit code from the email</label><input id="a-code" class="code-in" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10"></div>
+      <div class="err" id="aErr"></div><button class="btn primary wide" id="aVerify" type="submit">Sign in</button></form>`;
+    if (IS_HOME_APP) {
+      return `<section class="auth"><div class="kicker">Check your email</div><h1>Enter your code</h1>
+      <p>We sent a sign-in email to <b>${esc(S.authEmail)}</b>. Type the 6-digit code from it here. Tapping the link would open your browser instead of this app.</p>
+      ${codeForm}<button class="linkbtn" id="aBack" type="button">Use a different email</button></section>`;
+    }
     return `<section class="auth"><div class="kicker">Check your email</div><h1>Tap the link in your email</h1>
-    <p>We sent a sign-in email to <b>${esc(S.authEmail)}</b>. It can take a minute to arrive. Tap the link in it on this device, or enter the code if the email shows one.</p>
-    <form id="fCode" novalidate><div class="field"><label for="a-code">Sign-in code (if your email has one)</label><input id="a-code" class="code-in" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10"></div>
-    <div class="err" id="aErr"></div><button class="btn primary wide" id="aVerify" type="submit">Sign in</button></form>
+    <p>We sent a sign-in link to <b>${esc(S.authEmail)}</b>. Open it on this device and you're in. It can take a minute to arrive, so check spam if you don't see it.</p>
+    <details class="codealt"><summary>Have a 6-digit code instead?</summary>${codeForm}</details>
     <button class="linkbtn" id="aBack" type="button">Use a different email</button></section>`;
   }
   return `<section class="auth"><div class="kicker">Client progress tracker</div><h1>Track your progress with ${esc(TRAINER)}</h1>
@@ -240,14 +247,15 @@ function wireLogin() {
     const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: redirect, shouldCreateUser: true } });
     btn.disabled = false; btn.textContent = "Email me a sign-in link";
     if (error) { err.textContent = error.status === 429 ? "Too many sign-in emails. Wait a minute, then try again." : "Couldn't send the email. Check the address and try again."; return; }
-    S.authEmail = email; S.authStep = "code"; store.set("fa_email", email); render(); setTimeout(() => $("#a-code")?.focus(), 50);
+    S.authEmail = email; S.authStep = "code"; store.set("fa_email", email); render(); if (IS_HOME_APP) setTimeout(() => $("#a-code")?.focus(), 50);
   };
   if (fc) fc.onsubmit = async ev => {
     ev.preventDefault();
     const token = $("#a-code").value.replace(/\D/g, ""), err = $("#aErr"), btn = $("#aVerify");
     if (token.length < 6) { err.textContent = "Enter the code from the email."; return; }
     btn.disabled = true; btn.textContent = "Signing in…"; err.textContent = "";
-    const { error } = await sb.auth.verifyOtp({ email: S.authEmail, token, type: "email" });
+    let { error } = await sb.auth.verifyOtp({ email: S.authEmail, token, type: "email" });
+    if (error) ({ error } = await sb.auth.verifyOtp({ email: S.authEmail, token, type: "signup" }));
     btn.disabled = false; btn.textContent = "Sign in";
     if (error) err.textContent = "That code didn't work. It may have expired. Check the newest email or go back and request a new one.";
   };

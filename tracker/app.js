@@ -173,9 +173,10 @@ const DEMO = params.has("demo");
 const DEMO_CLIENT = params.get("demo") === "client";
 const CONFIGURED = !!(CFG.supabaseUrl && CFG.supabaseAnonKey && !/PASTE/.test(CFG.supabaseAnonKey));
 const TRAINER = CFG.trainerName || "your trainer";
+let VIA_LINK = /access_token|type=(magiclink|signup|recovery|invite)/.test(location.hash) || /[?&](code|token_hash)=/.test(location.search);
 const IS_HOME_APP = window.navigator.standalone === true || (window.matchMedia && matchMedia("(display-mode: standalone)").matches);
 let sb = null, api = null;
-const S = { me: null, isTrainer: false, clients: [], sel: null, checkins: [], urls: {}, screen: "loading", metric: "bf", view: "front", cmpA: null, cmpB: null, overlay: false, fade: 50, authEmail: "", authStep: "email" };
+const S = { me: null, isTrainer: false, clients: [], sel: null, checkins: [], urls: {}, screen: "loading", metric: "bf", view: "front", cmpA: null, cmpB: null, overlay: false, fade: 50, authEmail: "", authStep: "email", pwMode: null, pwBack: null };
 const store = { get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (_) {} } };
 const client = () => S.clients.find(c => c.id === S.sel) || null;
 const canDelete = e => S.isTrainer || (S.me && e.enteredBy === S.me.id);
@@ -190,11 +191,12 @@ function renderBar() {
     h += `<label class="small muted" for="clientPick" hidden>Client</label><select id="clientPick" aria-label="Client">${opts}</select>`;
   }
   if (S.screen === "app" && S.isTrainer) h += `<button class="btn" id="addClient" type="button">Add client</button>`;
-  h += `<span class="who" title="${esc(S.me?.email)}">${esc(S.me?.email)}</span><button class="btn ghost sm" id="signOut" type="button">${DEMO ? "Exit demo" : "Sign out"}</button>`;
+  h += `<span class="who" title="${esc(S.me?.email)}">${esc(S.me?.email)}</span>${DEMO ? "" : `<button class="btn ghost sm" id="changePw" type="button">Password</button>`}<button class="btn ghost sm" id="signOut" type="button">${DEMO ? "Exit demo" : "Sign out"}</button>`;
   el.innerHTML = h;
   const p = $("#clientPick"); if (p) p.onchange = () => selectClient(p.value);
   const a = $("#addClient"); if (a) a.onclick = () => openClient(null);
   $("#signOut").onclick = signOut;
+  const cp = $("#changePw"); if (cp) cp.onclick = () => { S.pwBack = S.screen; S.pwMode = "change"; S.screen = "password"; render(); };
 }
 
 /* ---------- screens ---------- */
@@ -204,6 +206,7 @@ function render() {
   if (S.screen === "loading") { app.innerHTML = `<div class="skel"></div>`; return; }
   if (S.screen === "setup") { app.innerHTML = setupScreen(); return; }
   if (S.screen === "login") { app.innerHTML = loginScreen(); wireLogin(); return; }
+  if (S.screen === "password") { app.innerHTML = passwordScreen(); wirePassword(); return; }
   if (S.screen === "noaccess") { app.innerHTML = noAccessScreen(); return; }
   if (!S.clients.length) { app.innerHTML = welcome(); const b = $("#welcomeAdd"); if (b) b.onclick = () => openClient(null); return; }
   const c = client(); const s = series(c, S.checkins);
@@ -232,15 +235,32 @@ function loginScreen() {
     <button class="linkbtn" id="aBack" type="button">Use a different email</button></section>`;
   }
   return `<section class="auth"><div class="kicker">Client progress tracker</div><h1>Track your progress with ${esc(TRAINER)}</h1>
-  <p>Sign in with the email you gave your trainer. We'll email you a sign-in link. There's no password to remember.</p>
-  <form id="fEmail" novalidate><div class="field"><label for="a-email">Email</label><input id="a-email" type="email" autocomplete="email" inputmode="email" value="${esc(S.authEmail)}"></div>
-  <div class="err" id="aErr"></div><button class="btn primary wide" id="aSend" type="submit">Email me a sign-in link</button></form></section>`;
+  <p>Sign in with the email you gave ${esc(TRAINER)} and your password.</p>
+  <form id="fPw" novalidate>
+    <div class="field"><label for="a-email">Email</label><input id="a-email" type="email" autocomplete="username" inputmode="email" value="${esc(S.authEmail)}"></div>
+    <div class="field"><label for="a-pass">Password</label><input id="a-pass" type="password" autocomplete="current-password"></div>
+    <label class="showpw" for="a-show"><input id="a-show" type="checkbox"> Show password</label>
+    <div class="err" id="aErr"></div><button class="btn primary wide" id="aSignIn" type="submit">Sign in</button></form>
+  <div class="or"><span>First time here, or forgot your password?</span></div>
+  <button class="btn wide" id="aSend" type="button">Email me a sign-in link</button>
+  <p class="small muted">We'll email you a link. After it signs you in, you'll set your password.</p></section>`;
 }
 function wireLogin() {
-  const fe = $("#fEmail"), fc = $("#fCode");
-  if (fe) fe.onsubmit = async ev => {
+  const fp = $("#fPw"), fc = $("#fCode"), sendBtn = $("#aSend");
+  const show = $("#a-show"); if (show) show.onchange = () => { $("#a-pass").type = show.checked ? "text" : "password"; };
+  if (fp) fp.onsubmit = async ev => {
     ev.preventDefault();
-    const email = $("#a-email").value.trim().toLowerCase(), err = $("#aErr"), btn = $("#aSend");
+    const email = $("#a-email").value.trim().toLowerCase(), password = $("#a-pass").value, err = $("#aErr"), btn = $("#aSignIn");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = "Enter a valid email address."; return; }
+    if (!password) { err.textContent = "Enter your password. First time here? Use \"Email me a sign-in link\" below."; return; }
+    btn.disabled = true; btn.textContent = "Signing in…"; err.textContent = "";
+    store.set("fa_email", email); S.authEmail = email;
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    btn.disabled = false; btn.textContent = "Sign in";
+    if (error) err.textContent = error.status === 429 ? "Too many attempts. Wait a minute, then try again." : "That email and password don't match. First time here or forgot it? Use \"Email me a sign-in link\" below.";
+  };
+  if (sendBtn) sendBtn.onclick = async () => {
+    const email = $("#a-email").value.trim().toLowerCase(), err = $("#aErr"), btn = sendBtn;
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = "Enter a valid email address."; return; }
     btn.disabled = true; btn.textContent = "Sending…"; err.textContent = "";
     const redirect = location.origin + location.pathname;
@@ -257,9 +277,44 @@ function wireLogin() {
     let { error } = await sb.auth.verifyOtp({ email: S.authEmail, token, type: "email" });
     if (error) ({ error } = await sb.auth.verifyOtp({ email: S.authEmail, token, type: "signup" }));
     btn.disabled = false; btn.textContent = "Sign in";
+    if (!error) VIA_LINK = true;
     if (error) err.textContent = "That code didn't work. It may have expired. Check the newest email or go back and request a new one.";
   };
   const back = $("#aBack"); if (back) back.onclick = () => { S.authStep = "email"; render(); };
+}
+
+function passwordScreen() {
+  const create = S.pwMode === "create";
+  return `<section class="auth"><div class="kicker">${create ? "One more step" : "Your password"}</div><h1>${create ? "Create your password" : "Set a new password"}</h1>
+  <p>${create ? "Next time, sign in with your email and this password. No waiting for an email." : `Signed in as <b>${esc(S.me?.email)}</b>.`}</p>
+  <form id="fNewPw" novalidate>
+    <input type="email" autocomplete="username" value="${esc(S.me?.email)}" hidden readonly>
+    <div class="field"><label for="p-new">New password</label><input id="p-new" type="password" autocomplete="new-password" minlength="8"><span class="hint">At least 8 characters.</span></div>
+    <div class="field"><label for="p-again">Type it again</label><input id="p-again" type="password" autocomplete="new-password"></div>
+    <label class="showpw" for="p-show"><input id="p-show" type="checkbox"> Show password</label>
+    <div class="err" id="pErr"></div><button class="btn primary wide" id="pSave" type="submit">Save password</button></form>
+  <button class="linkbtn" id="pSkip" type="button">${create ? "Not now" : "Keep my current password"}</button></section>`;
+}
+function wirePassword() {
+  const show = $("#p-show"); show.onchange = () => { $("#p-new").type = $("#p-again").type = show.checked ? "text" : "password"; };
+  const leave = async (skipped) => { if (skipped === true && S.pwMode === "create") store.set("fa_pwskip_" + S.me.id, "1"); VIA_LINK = false; const back = S.pwBack; S.pwMode = null; S.pwBack = null; if (back === "app" || back === "noaccess") { S.screen = back; render(); } else await loadAll(); };
+  $("#pSkip").onclick = () => leave(true);
+  $("#fNewPw").onsubmit = async ev => {
+    ev.preventDefault();
+    const a = $("#p-new").value, b = $("#p-again").value, err = $("#pErr"), btn = $("#pSave");
+    if (a.length < 8) { err.textContent = "Use at least 8 characters."; return; }
+    if (a !== b) { err.textContent = "The two passwords don't match."; return; }
+    btn.disabled = true; btn.textContent = "Saving…"; err.textContent = "";
+    const { error } = await sb.auth.updateUser({ password: a, data: { password_set: true } });
+    btn.disabled = false; btn.textContent = "Save password";
+    if (error && error.code !== "same_password") {
+      err.textContent = error.code === "weak_password" ? "That password is too easy to guess. Try a longer one." : error.code === "reauthentication_needed" ? "For security, sign out and sign in with an email link, then set your password." : "Couldn't save the password. Try again.";
+      return;
+    }
+    toast("Password saved. Next time, sign in with your email and password.");
+    await leave();
+  };
+  setTimeout(() => $("#p-new")?.focus(), 50);
 }
 
 function noAccessScreen() {
@@ -570,6 +625,8 @@ async function onSession(session) {
   S.me = { id: u.id, email: u.email };
   try { S.isTrainer = await api.isTrainer(u.id); } catch (_) { S.isTrainer = false; }
   if (location.hash.includes("access_token") || location.search.includes("code=")) history.replaceState(null, "", location.pathname);
+  const pwSet = !!(u.user_metadata && u.user_metadata.password_set);
+  if ((!pwSet && !store.get("fa_pwskip_" + u.id)) || VIA_LINK) { S.pwMode = pwSet ? "change" : "create"; S.pwBack = null; S.screen = "password"; render(); return; }
   await loadAll();
 }
 async function boot() {

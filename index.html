@@ -23,13 +23,15 @@ header{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.94);backdro
 @media(max-width:850px){.navlinks a:not(.btn){display:none}.navlinks{gap:16px}.navlinks a.navlogin{display:inline;color:var(--ink)}.hero{padding:42px 0 36px}.hero-grid{grid-template-columns:1fr}.hero-copy{padding:0}.hero-portrait{margin:12px auto 0;max-width:360px}.hero-actions{justify-content:center}.hero-actions .btn,.hero-actions .btn:last-child{min-width:min(100%,300px)}.shop-grid{grid-template-columns:1fr}.visual{height:175px}.cards,.steps{grid-template-columns:1fr}.step{padding:0 0 22px}.step+.step{border-left:0;border-top:1px solid var(--line);padding:22px 0 0}.cta-box{padding:30px;display:block}.cta-box .btn{margin-top:20px}.foot{display:block}.brand img{width:205px}}
 @media(max-width:480px){.wrap.nav{padding:0 16px;gap:12px}.brand img{width:150px}.navlinks{gap:14px}.nl-long{display:none}.navlinks .btn{padding:10px 14px;font-size:14px}}
 @media(max-width:360px){.brand img{width:128px}.navlinks{gap:10px}.navlinks .btn{padding:9px 12px}}
+.tool-band{padding:0 0 48px;background:#fff}.tool-card{display:flex;align-items:center;justify-content:space-between;gap:24px;border:1px solid #E3E8F0;border-radius:24px;padding:26px 30px;background:linear-gradient(135deg,#F2F6FF 0%,#fff 70%);box-shadow:0 18px 52px rgba(16,24,40,.06);transition:.25s ease}.tool-card:hover{transform:translateY(-3px);box-shadow:0 24px 62px rgba(16,24,40,.1)}.tool-card h2{font-family:Georgia,"Times New Roman",serif;font-weight:500;font-size:clamp(26px,3.2vw,36px);letter-spacing:-.03em;line-height:1.08;margin:6px 0 6px}.tool-card p{margin:0;color:var(--muted);font-size:15px;max-width:560px}.tool-card .btn{flex:none}
+@media(max-width:700px){.tool-card{flex-direction:column;align-items:flex-start;padding:22px}.tool-card .btn{width:100%}}
 </style>
 </head>
 <body>
 <header>
   <div class="wrap nav">
     <a class="brand" href="#"><img src="fast-aminos-wellness.svg" alt="FAST AMINOS WELLNESS"></a>
-    <nav class="navlinks"><a href="#shop">Shop</a><a href="#about">About</a><a href="#how">How It Works</a><a class="navlogin" href="tracker/"><span class="nl-long">Client </span>Login</a><a class="btn btn-primary" href="https://fast-aminos-wellness.plyamed.com/" target="_blank" rel="noopener">Get Started</a></nav>
+    <nav class="navlinks"><a href="#shop">Shop</a><a href="#about">About</a><a href="#how">How It Works</a><a href="calculator/">Calculator</a><a class="navlogin" href="tracker/"><span class="nl-long">Client </span>Login</a><a class="btn btn-primary" href="https://fast-aminos-wellness.plyamed.com/" target="_blank" rel="noopener">Get Started</a></nav>
   </div>
 </header>
 
@@ -75,6 +77,13 @@ header{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.94);backdro
 
     </div>
   </div>
+</section>
+
+<section class="tool-band" aria-label="Free calculator">
+  <div class="wrap"><a class="tool-card" href="calculator/">
+    <div><div class="shop-kicker">Free tool</div><h2>Calorie &amp; macro calculator</h2><p>Estimate your body fat with a tape measure, then get your daily calories and protein, carb and fat targets.</p></div>
+    <span class="btn btn-primary">Calculate my macros&nbsp;<span aria-hidden="true">→</span></span>
+  </a></div>
 </section>
 
 <section class="about section" id="about">

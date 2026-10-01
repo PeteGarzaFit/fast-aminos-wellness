@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Calorie & Macro Calculator | FAST AMINOS WELLNESS</title>
+<meta name="description" content="Free calorie and macro calculator. Estimate your body fat with a tape measure, then get daily calories and protein, carb and fat targets for fat loss, maintenance or muscle gain.">
+<meta name="theme-color" content="#1769E8">
+<link rel="icon" href="../tracker/icons/icon.svg" type="image/svg+xml">
+<style>
+:root{
+  --blue:#1769E8; --blue-dk:#1257C6; --blue-soft:#E8F0FD;
+  --ink:#111827; --ink-2:#475467; --muted:#667085; --faint:#98A2B3;
+  --line:#E7EAF0; --grid:#EEF1F5; --soft:#F6F8FC; --white:#FFFFFF;
+  --protein:#1769E8; --carb:#0EA5A4; --fat:#E8A317;
+  --warn:#935F00; --warn-soft:#FDF1D6;
+  --serif:Georgia,"Times New Roman",serif;
+  --sans:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font-family:var(--sans);color:var(--ink);background:var(--soft);line-height:1.5;font-size:15px;-webkit-text-size-adjust:100%}
+a{color:var(--blue)}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+[hidden]{display:none!important}
+.wrap{max-width:1120px;margin:0 auto;padding-inline:16px}
+
+.bar{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.95);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+.bar-in{display:flex;align-items:center;gap:12px;min-height:64px}
+.brand img{width:190px;height:auto;display:block}
+.bar-links{margin-left:auto;display:flex;gap:16px;align-items:center;font-size:14px;font-weight:650}
+.bar-links a{color:var(--ink);text-decoration:none}
+.bar-links a:hover{color:var(--blue)}
+@media (max-width:520px){.brand img{width:140px}.bar-links .hide-sm{display:none}}
+
+.hero{padding-block:30px 8px;max-width:760px}
+.kicker{font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:850;color:var(--blue)}
+h1{font-family:var(--serif);font-weight:500;font-size:clamp(34px,5vw,54px);line-height:1.02;letter-spacing:-.04em;margin:8px 0 10px;text-wrap:balance}
+.hero p{color:var(--muted);font-size:16px;margin:0;max-width:62ch}
+
+.layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-items:start;padding-block:20px 48px}
+@media (max-width:900px){.layout{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--white);border:1px solid var(--line);border-radius:18px;padding:20px;min-width:0}
+.card+.card{margin-top:18px}
+.step{display:flex;align-items:baseline;gap:10px;margin-bottom:14px}
+.step b{font-size:12px;font-weight:800;letter-spacing:.1em;color:var(--blue)}
+.step h2{font-family:var(--serif);font-weight:500;font-size:24px;letter-spacing:-.02em;margin:0}
+.step span.opt{font-size:12.5px;color:var(--muted)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:12px}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field label,.flabel{font-size:12.5px;font-weight:650;color:var(--ink-2)}
+.hint{font-size:11.5px;color:var(--faint)}
+input[type=number],select{width:100%;background:var(--white);border:1px solid #D7DFEA;border-radius:10px;padding:10px 11px;font-size:16px;min-width:0}
+input:focus,select:focus{border-color:var(--blue)}
+.stack{display:flex;flex-direction:column;gap:12px}
+.seg{display:flex;background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:3px;gap:3px;flex-wrap:wrap}
+.seg label{flex:1 1 auto;text-align:center;cursor:pointer;border-radius:9px;padding:8px 10px;font-size:13.5px;font-weight:650;color:var(--muted);min-width:0}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg input:checked+span{color:var(--blue)}
+.seg label:has(input:checked){background:var(--white);box-shadow:0 1px 3px rgba(16,24,40,.12);color:var(--blue)}
+.seg label:has(input:focus-visible){outline:2px solid var(--blue);outline-offset:1px}
+.bfbox{background:var(--blue-soft);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.bfout{font-size:14px;color:var(--ink-2);min-height:1.4em;font-variant-numeric:tabular-nums}
+.bfout b{color:var(--ink)}
+.err{color:#C0342B;font-size:13px}
+
+/* results */
+.res-top{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:baseline;justify-content:space-between}
+.big{font-weight:800;font-size:52px;line-height:1;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.big small{font-size:18px;color:var(--muted);font-weight:650;letter-spacing:0;margin-left:4px}
+.res-sub{color:var(--muted);font-size:14px}
+.goalseg{margin-block:14px}
+.macros{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:14px}
+.macro{border:1px solid var(--line);border-radius:14px;padding:12px;min-width:0}
+.macro .lbl{display:flex;align-items:center;gap:6px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:800;color:var(--muted)}
+.dot{width:9px;height:9px;border-radius:50%;flex:none}
+.macro .g{font-weight:800;font-size:26px;font-variant-numeric:tabular-nums;line-height:1.15;margin-top:4px}
+.macro .g small{font-size:13px;color:var(--muted);font-weight:650;margin-left:2px}
+.macro .k{font-size:12px;color:var(--faint);font-variant-numeric:tabular-nums}
+.mbar{display:flex;height:10px;border-radius:999px;overflow:hidden;margin-top:14px;gap:2px;background:var(--white)}
+.mbar span{display:block;height:100%}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:10px;margin-top:16px}
+.fact{background:var(--soft);border-radius:12px;padding:10px 12px}
+.fact .lbl{font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:750;color:var(--muted)}
+.fact .v{font-weight:750;font-size:18px;font-variant-numeric:tabular-nums}
+.note{font-size:13px;color:var(--ink-2);background:var(--warn-soft);border-radius:10px;padding:9px 12px;margin-top:12px}
+.method{font-size:12.5px;color:var(--muted);margin-top:12px}
+table{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums;margin-top:6px}
+th{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:750;text-align:right;padding:6px 8px;border-bottom:1px solid var(--line)}
+td{text-align:right;padding:9px 8px;border-bottom:1px solid var(--grid)}
+th:first-child,td:first-child{text-align:left;padding-left:0}
+tr.cur td{font-weight:750;color:var(--blue)}
+.empty{color:var(--muted);font-size:14.5px;padding:18px;border:1px dashed #D7DFEA;border-radius:14px;text-align:center}
+
+.cta{background:var(--ink);color:#fff;border-radius:18px;padding:22px}
+.cta h3{font-family:var(--serif);font-weight:500;font-size:26px;letter-spacing:-.02em;margin:0 0 6px}
+.cta p{color:#C8CFDA;margin:0 0 14px;font-size:14.5px}
+.btns{display:flex;gap:10px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;border-radius:12px;padding:11px 18px;font-weight:750;font-size:14.5px;text-decoration:none;border:1px solid transparent}
+.btn.primary{background:var(--blue);color:#fff}
+.btn.primary:hover{background:var(--blue-dk)}
+.btn.light{background:#fff;color:var(--ink)}
+.btn.ghost{border-color:rgba(255,255,255,.35);color:#fff}
+footer{border-top:1px solid var(--line);background:var(--white);padding-block:20px 28px;font-size:12px;color:var(--muted)}
+footer p{margin:0;max-width:900px}
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="wrap bar-in">
+    <a class="brand" href="../" aria-label="FAST AMINOS WELLNESS home"><img src="../fast-aminos-wellness.svg" alt="FAST AMINOS WELLNESS"></a>
+    <nav class="bar-links"><a class="hide-sm" href="../">Home</a><a href="../tracker/">Login</a></nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="hero">
+    <div class="kicker">Free tool</div>
+    <h1>Calorie &amp; macro calculator</h1>
+    <p>Find your daily calories and protein, carb and fat targets. Add your body fat % (or estimate it with a tape measure) for a more accurate number.</p>
+  </section>
+
+  <div class="layout">
+    <div>
+      <section class="card" aria-labelledby="s1">
+        <div class="step"><b>01</b><h2 id="s1">About you</h2></div>
+        <div class="stack">
+          <div class="field"><span class="flabel" id="sexL">Sex</span>
+            <div class="seg" role="radiogroup" aria-labelledby="sexL">
+              <label><input type="radio" name="sex" value="female" id="sex-f"><span>Female</span></label>
+              <label><input type="radio" name="sex" value="male" id="sex-m" checked><span>Male</span></label>
+            </div></div>
+          <div class="grid2">
+            <div class="field"><label for="age">Age</label><input id="age" type="number" inputmode="numeric" min="15" max="90" placeholder="e.g. 38"></div>
+            <div class="field"><label for="wt">Weight (lb)</label><input id="wt" type="number" inputmode="decimal" min="70" max="700" step="0.1" placeholder="e.g. 185"></div>
+          </div>
+          <div class="grid2">
+            <div class="field"><label for="ft">Height, feet</label><input id="ft" type="number" inputmode="numeric" min="4" max="7" placeholder="5"></div>
+            <div class="field"><label for="inch">Height, inches</label><input id="inch" type="number" inputmode="decimal" min="0" max="11.5" step="0.5" placeholder="10"></div>
+          </div>
+          <div class="field"><label for="act">Activity</label>
+            <select id="act">
+              <option value="1.2">Mostly sitting, little exercise</option>
+              <option value="1.375">Light: exercise 1–3 days a week</option>
+              <option value="1.55" selected>Moderate: exercise 3–5 days a week</option>
+              <option value="1.725">Very active: hard exercise 6–7 days a week</option>
+              <option value="1.9">Athlete or physical job plus training</option>
+            </select></div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="s2">
+        <div class="step"><b>02</b><h2 id="s2">Body fat</h2><span class="opt">Optional, but more accurate</span></div>
+        <div class="stack">
+          <div class="seg" role="radiogroup" aria-label="Body fat">
+            <label><input type="radio" name="bfmode" value="skip" id="bf-skip" checked><span>Skip</span></label>
+            <label><input type="radio" name="bfmode" value="known" id="bf-known"><span>I know it</span></label>
+            <label><input type="radio" name="bfmode" value="tape" id="bf-tape"><span>Tape measure</span></label>
+          </div>
+          <div class="bfbox" id="boxKnown" hidden>
+            <div class="field" style="max-width:220px"><label for="bfpct">Body fat %</label><input id="bfpct" type="number" inputmode="decimal" min="3" max="65" step="0.1" placeholder="e.g. 22"></div>
+            <span class="hint">From a body composition scan (Omron, DEXA, InBody) or your progress tracker.</span>
+          </div>
+          <div class="bfbox" id="boxTape" hidden>
+            <div class="grid3">
+              <div class="field"><label for="waist">Waist (in)</label><input id="waist" type="number" inputmode="decimal" step="0.1"><span class="hint">At the navel</span></div>
+              <div class="field"><label for="neck">Neck (in)</label><input id="neck" type="number" inputmode="decimal" step="0.1"><span class="hint">Below the Adam's apple</span></div>
+              <div class="field" id="hipF"><label for="hip">Hips (in)</label><input id="hip" type="number" inputmode="decimal" step="0.1"><span class="hint">Widest point</span></div>
+            </div>
+            <div class="bfout" id="tapeOut"></div>
+            <span class="hint">US Navy tape method. Usually within 3–4 points of a lab scan; muscular builds tend to read low.</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div>
+      <section class="card" aria-labelledby="s3" aria-live="polite">
+        <div class="step"><b>03</b><h2 id="s3">Your numbers</h2></div>
+        <div id="results"><div class="empty">Fill in age, weight and height to see your calories and macros.</div></div>
+      </section>
+      <section class="card cta">
+        <h3>Want your real numbers?</h3>
+        <p>Calculators estimate. Pete measures body fat with an Omron scan and tracks your fat and lean mass week to week, so your calories can be adjusted to what your body actually does.</p>
+        <div class="btns"><a class="btn light" href="https://fast-aminos-wellness.plyamed.com/#connect" target="_blank" rel="noopener">Request a Call</a><a class="btn ghost" href="../tracker/">Client Login</a></div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<footer><div class="wrap"><p>For general wellness and education only, not medical advice. Calorie needs vary by person. If you are pregnant, nursing, under 18, or managing a medical condition, talk with a healthcare professional before changing your diet.</p></div></footer>
+
+<script>
+(function(){
+"use strict";
+const $=s=>document.querySelector(s);
+const num=v=>{const n=parseFloat(v);return isFinite(n)?n:null};
+const r5=n=>Math.round(n/5)*5, r10=n=>Math.round(n/10)*10;
+const fmt=n=>Math.round(n).toLocaleString("en-US");
+
+function navy(sex,h,waist,neck,hip){
+  if(!h||!waist||!neck)return null;let v;
+  if(sex==="male"){const d=waist-neck;if(d<=0)return null;v=86.010*Math.log10(d)-70.041*Math.log10(h)+36.76;}
+  else{if(!hip)return null;const d=waist+hip-neck;if(d<=0)return null;v=163.205*Math.log10(d)-97.684*Math.log10(h)-78.387;}
+  return (v>2&&v<70)?v:null;
+}
+
+const GOALS=[
+  {id:"lose1",label:"Lose ~1 lb/week",adj:-500},
+  {id:"lose05",label:"Lose ~0.5 lb/week",adj:-250},
+  {id:"maint",label:"Maintain",adj:0},
+  {id:"gain",label:"Build muscle",adj:250}
+];
+let goal="lose05";
+
+/* Core math, exposed for testing. */
+function compute(p){
+  const kg=p.lb*0.453592, cm=p.inches*2.54;
+  const mifflin=10*kg+6.25*cm-5*p.age+(p.sex==="male"?5:-161);
+  let bmr=mifflin, method="Mifflin-St Jeor (age, height, weight)", lbmLb=null;
+  if(p.bf!=null){lbmLb=p.lb*(1-p.bf/100);bmr=370+21.6*lbmLb*0.453592;method="Katch-McArdle (lean body mass)";}
+  const tdee=bmr*p.act;
+  const floor=p.sex==="male"?1500:1200;
+  const plans=GOALS.map(g=>{
+    // Deficits never go below a sensible floor (or below maintenance, if maintenance is already lower).
+    let kcal=tdee+g.adj, floored=false;
+    if(g.adj<0){const minK=Math.min(floor,tdee);if(kcal<minK){kcal=minK;floored=true;}}
+    kcal=r10(kcal);
+    // Protein: by lean mass when known, else by bodyweight (capped at a BMI-25 weight for larger bodies).
+    let pro;
+    if(lbmLb!=null) pro=lbmLb*(g.adj<0?1.1:1.0);
+    else{const bmi=kg/Math.pow(cm/100,2);const refLb=bmi>25?(25*Math.pow(cm/100,2))/0.453592:p.lb;pro=refLb*(g.adj<0?0.9:0.8);}
+    pro=r5(pro);
+    let fat=Math.max(r5(kcal*0.27/9), r5(p.lb*0.3));
+    let carb=(kcal-pro*4-fat*9)/4;
+    if(carb<50){fat=Math.max(r5(p.lb*0.25),r5((kcal-pro*4-50*4)/9));carb=(kcal-pro*4-fat*9)/4;}
+    carb=Math.max(0,r5(carb));
+    return {...g,kcal,floored,pro,fat,carb};
+  });
+  return {bmr,tdee,method,lbmLb,fatLb:lbmLb!=null?p.lb-lbmLb:null,plans};
+}
+window.__compute=compute;
+
+function sex(){return document.querySelector('input[name=sex]:checked').value}
+function bfmode(){return document.querySelector('input[name=bfmode]:checked').value}
+function heightIn(){const f=num($("#ft").value),i=num($("#inch").value)??0;return f!=null&&f>=4&&f<=7&&i>=0&&i<12?f*12+i:null}
+
+function currentBf(){
+  const m=bfmode();
+  if(m==="known"){const v=num($("#bfpct").value);return v!=null&&v>=3&&v<=65?{bf:v,src:"you entered"}:null;}
+  if(m==="tape"){const v=navy(sex(),heightIn(),num($("#waist").value),num($("#neck").value),num($("#hip").value));return v!=null?{bf:v,src:"tape estimate"}:null;}
+  return null;
+}
+
+function update(){
+  $("#boxKnown").hidden=bfmode()!=="known";
+  $("#boxTape").hidden=bfmode()!=="tape";
+  $("#hipF").hidden=sex()==="male";
+  // tape preview
+  if(bfmode()==="tape"){
+    const h=heightIn(),w=num($("#waist").value),n=num($("#neck").value),hp=num($("#hip").value);
+    const v=navy(sex(),h,w,n,hp);
+    $("#tapeOut").innerHTML=v!=null?`Estimated body fat: <b>${v.toFixed(1)}%</b>. Your numbers below now use it.`:(!h?"Enter your height above first.":(w&&n&&(sex()==="male"||hp))?"Those measurements don't give a valid estimate. Check waist and neck.":"Enter "+(sex()==="male"?"waist and neck":"waist, neck and hips")+".");
+  }
+  const age=num($("#age").value),lb=num($("#wt").value),inches=heightIn(),act=num($("#act").value);
+  const out=$("#results");
+  if(!(age>=15&&age<=90&&lb>=70&&lb<=700&&inches)){out.innerHTML=`<div class="empty">Fill in age, weight and height to see your calories and macros.</div>`;return;}
+  const bfi=currentBf();
+  const r=compute({sex:sex(),age,lb,inches,act,bf:bfi?bfi.bf:null});
+  const pl=r.plans.find(p=>p.id===goal);
+  const kp=pl.pro*4,kc=pl.carb*4,kf=pl.fat*9,kt=kp+kc+kf;
+  const macro=(name,color,g,k)=>`<div class="macro"><div class="lbl"><span class="dot" style="background:${color}"></span>${name}</div><div class="g">${g}<small>g</small></div><div class="k">${fmt(k)} kcal · ${Math.round(k/kt*100)}%</div></div>`;
+  out.innerHTML=`<div class="res-top"><div><div class="big">${fmt(pl.kcal)}<small>calories/day</small></div></div><div class="res-sub">Maintenance: ${fmt(r10(r.tdee))}</div></div>
+  <div class="seg goalseg" role="radiogroup" aria-label="Goal">${GOALS.map(g=>`<label><input type="radio" name="goal" value="${g.id}"${g.id===goal?" checked":""}><span>${g.label}</span></label>`).join("")}</div>
+  <div class="macros">${macro("Protein","var(--protein)",pl.pro,kp)}${macro("Carbs","var(--carb)",pl.carb,kc)}${macro("Fat","var(--fat)",pl.fat,kf)}</div>
+  <div class="mbar" aria-hidden="true"><span style="width:${kp/kt*100}%;background:var(--protein)"></span><span style="width:${kc/kt*100}%;background:var(--carb)"></span><span style="width:${kf/kt*100}%;background:var(--fat)"></span></div>
+  ${pl.floored?`<div class="note">We held this at ${fmt(pl.kcal)} calories instead of going lower. Eating less than this is hard to sustain and can cost muscle. More daily activity or a slower goal is the better choice.</div>`:""}
+  <div class="facts">
+    <div class="fact"><div class="lbl">Resting burn</div><div class="v">${fmt(r10(r.bmr))} kcal</div></div>
+    ${r.lbmLb!=null?`<div class="fact"><div class="lbl">Lean mass</div><div class="v">${r.lbmLb.toFixed(1)} lb</div></div><div class="fact"><div class="lbl">Fat mass</div><div class="v">${r.fatLb.toFixed(1)} lb</div></div>`:""}
+  </div>
+  <table aria-label="All goals"><thead><tr><th>Goal</th><th>Calories</th><th>Protein</th><th>Carbs</th><th>Fat</th></tr></thead><tbody>
+  ${r.plans.map(p=>`<tr${p.id===goal?' class="cur"':""}><td>${p.label}</td><td>${fmt(p.kcal)}</td><td>${p.pro}g</td><td>${p.carb}g</td><td>${p.fat}g</td></tr>`).join("")}</tbody></table>
+  <div class="method">Formula: ${r.method}${bfi?`, body fat ${bfi.bf.toFixed(1)}% (${bfi.src})`:". Add your body fat % for a lean-mass-based number"}. Track your weight for 2–3 weeks and adjust by 100–200 calories if you're not moving at the expected rate.</div>`;
+  out.querySelectorAll('input[name=goal]').forEach(i=>i.onchange=()=>{goal=i.value;update();});
+}
+
+/* Prefill from the link (used by the progress tracker): ?sex=male&age=38&ft=5&in=10&lb=185&bf=22.4 */
+const q=new URLSearchParams(location.search);
+if(q.get("sex")==="female")$("#sex-f").checked=true;
+const setv=(id,k)=>{const v=q.get(k);if(v!=null&&v!==""&&isFinite(+v))$(id).value=v;};
+setv("#age","age");setv("#wt","lb");setv("#ft","ft");setv("#inch","in");
+if(q.get("bf")&&isFinite(+q.get("bf"))){$("#bf-known").checked=true;$("#bfpct").value=q.get("bf");}
+const act=q.get("act");if(act&&[...$("#act").options].some(o=>o.value===act))$("#act").value=act;
+
+document.addEventListener("input",e=>{if(!e.target.matches('input[name=goal]'))update();});
+// Number boxes already update on every keystroke; re-rendering again when they lose focus
+// would swallow a tap on a goal button.
+document.addEventListener("change",e=>{if(!e.target.matches('input[name=goal],input[type=number]'))update();});
+update();
+})();
+</script>
+</body>
+</html>

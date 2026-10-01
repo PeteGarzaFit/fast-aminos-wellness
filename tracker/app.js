@@ -345,8 +345,18 @@ function head(c, s) {
   const linked = S.isTrainer ? (c.userId ? ` · <span title="${esc(c.email)}">Signed in</span>` : ` · <span title="${esc(c.email)}">Hasn't signed in yet</span>`) : "";
   return `<div class="chead"><div class="grow">${S.isTrainer ? "" : `<div class="kicker">Your progress</div>`}<h1>${esc(c.name)}</h1>
     <div class="meta">${esc(bits)}${c.goal ? ` · Goal: ${esc(c.goal)}` : ""}${linked}</div><div>${pill}</div></div>
-    <div class="actions">${S.isTrainer ? `<button class="btn" id="editClient" type="button">Edit client</button>` : ""}<button class="btn primary" id="newEntry" type="button">${S.isTrainer ? "New check-in" : "Log check-in"}</button></div></div>
+    <div class="actions">${calcLink(c, s)}${S.isTrainer ? `<button class="btn" id="editClient" type="button">Edit client</button>` : ""}<button class="btn primary" id="newEntry" type="button">${S.isTrainer ? "New check-in" : "Log check-in"}</button></div></div>
   <details class="how"><summary>How the estimate works</summary><p>Each check-in runs the US Navy tape formula on waist, neck${c.sex === "male" ? "" : ", hips"} and height. On gym days the Omron reading is compared with that number and the gap is saved. Home check-ins use the tape number plus the most recent gap. Omron readings swing with water, food and training, so they're taken at the same time of day, before a workout.</p></details>`;
+}
+
+/* Opens the public calculator pre-filled with this client's latest numbers. */
+function calcLink(c, s) {
+  const last = s.rows[s.rows.length - 1]; if (!last || !c.height) return "";
+  const bfRow = [...s.rows].reverse().find(r => r.bf != null);
+  const q = new URLSearchParams({ sex: c.sex, ft: String(Math.floor(c.height / 12)), in: String(Math.round((c.height % 12) * 2) / 2), lb: String(last.e.weight) });
+  const age = ageAt(c.dob, todayISO()); if (age != null) q.set("age", String(age));
+  if (bfRow) q.set("bf", bfRow.bf.toFixed(1));
+  return `<a class="btn" href="../calculator/?${q}" target="_blank" rel="noopener">Calories &amp; macros</a>`;
 }
 
 function tiles(c, s) {

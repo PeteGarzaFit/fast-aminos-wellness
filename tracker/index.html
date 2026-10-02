@@ -14,7 +14,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="FA Tracker">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="stylesheet" href="app.css?v=20261002b">
+<link rel="stylesheet" href="app.css?v=20261002c">
 </head>
 <body>
 <header class="bar">
@@ -92,15 +92,16 @@
 <dialog id="dlgPlan" class="wide">
   <form id="fPlan" novalidate>
     <h3 id="plTitle">Workout plan</h3>
+    <div class="tplrow"><label for="pl-tpl">Template</label><select id="pl-tpl"></select><span class="hint">Picking a template replaces what's below. You can still edit everything for this client.</span></div>
     <div id="planEd" class="planed"></div>
     <div class="err" id="plErr"></div>
-    <div class="foot"><button type="button" class="btn danger" id="plDelete" hidden>Delete plan</button><div class="r"><button type="button" class="btn" id="plCancel">Cancel</button><button type="submit" class="btn primary" id="plSave">Save plan</button></div></div>
+    <div class="foot"><button type="button" class="btn danger" id="plDelete" hidden>Delete plan</button><div class="r"><button type="button" class="btn" id="plSaveTpl">Save as template</button><button type="button" class="btn" id="plCancel">Cancel</button><button type="submit" class="btn primary" id="plSave">Save plan</button></div></div>
   </form>
 </dialog>
 
-<script src="config.js?v=20261002b"></script>
+<script src="config.js?v=20261002c"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
-<script src="library.js?v=20261002b"></script>
-<script src="app.js?v=20261002b"></script>
+<script src="library.js?v=20261002c"></script>
+<script src="app.js?v=20261002c"></script>
 </body>
 </html>

@@ -9,6 +9,7 @@
 --   * Only trainers can record Omron readings (gym-day calibration).
 --   * Only trainers can write workout plans and check-in feedback; each client
 --     can read their own.
+--   * Plan templates are trainer-only; clients never see them.
 --   * Signed-out visitors (anon) can't read or write anything.
 
 create extension if not exists pgcrypto;
@@ -68,6 +69,17 @@ create table if not exists public.client_plans (
   updated_at timestamptz not null default now()
 );
 create index if not exists client_plans_updated_by on public.client_plans (updated_by);
+
+-- Reusable plan templates for the trainer (added October 2026).
+create table if not exists public.plan_templates (
+  id         uuid primary key default gen_random_uuid(),
+  name       text not null check (char_length(name) between 1 and 120),
+  title      text check (char_length(title) <= 120),
+  notes      text check (char_length(notes) <= 2000),
+  days       jsonb not null default '[]'::jsonb check (jsonb_typeof(days) = 'array' and pg_column_size(days) < 200000),
+  updated_at timestamptz not null default now()
+);
+create unique index if not exists plan_templates_name_key on public.plan_templates (lower(name));
 
 -- Older setups put helpers in public; remove them there.
 drop function if exists public.is_trainer() cascade;
@@ -161,6 +173,16 @@ drop trigger if exists client_plans_stamp on public.client_plans;
 create trigger client_plans_stamp before insert or update on public.client_plans
   for each row execute function private.client_plans_stamp();
 
+create or replace function private.plan_templates_stamp() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  new.updated_at := now();
+  return new;
+end $$;
+drop trigger if exists plan_templates_stamp on public.plan_templates;
+create trigger plan_templates_stamp before insert or update on public.plan_templates
+  for each row execute function private.plan_templates_stamp();
+
 -- Only signed-in users may run the two lookup helpers (policies need them).
 -- Nobody calls the trigger functions directly.
 revoke all on all functions in schema private from public, anon, authenticated;
@@ -171,17 +193,19 @@ grant execute on function private.my_client_ids() to authenticated;
 -- ---------- Data API access ----------
 -- New Supabase projects don't expose new tables automatically, so grant
 -- signed-in users access explicitly. Row level security below decides which rows.
-revoke all on public.trainers, public.clients, public.checkins, public.client_plans from anon;
+revoke all on public.trainers, public.clients, public.checkins, public.client_plans, public.plan_templates from anon;
 grant select on public.trainers to authenticated;
 grant select, insert, update, delete on public.clients to authenticated;
 grant select, insert, update, delete on public.checkins to authenticated;
 grant select, insert, update, delete on public.client_plans to authenticated;
+grant select, insert, update, delete on public.plan_templates to authenticated;
 
 -- ---------- row level security ----------
 alter table public.trainers enable row level security;
 alter table public.clients  enable row level security;
 alter table public.checkins enable row level security;
 alter table public.client_plans enable row level security;
+alter table public.plan_templates enable row level security;
 
 drop policy if exists "trainers read self" on public.trainers;
 create policy "trainers read self" on public.trainers
@@ -243,6 +267,18 @@ create policy "plans trainer update" on public.client_plans
 drop policy if exists "plans trainer delete" on public.client_plans;
 create policy "plans trainer delete" on public.client_plans
   for delete to authenticated using ((select private.is_trainer()));
+
+drop policy if exists "templates trainer only" on public.plan_templates;
+create policy "templates trainer only" on public.plan_templates
+  for all to authenticated
+  using ((select private.is_trainer())) with check ((select private.is_trainer()));
+
+-- Starter template. Added once; edits you make later are never overwritten.
+insert into public.plan_templates (name, title, notes, days)
+select 'Phase 1: Build the Base (4-day Upper/Lower)', 'Phase 1: Build the Base',
+  '4 days a week: lift Monday and Tuesday, rest Wednesday, lift Thursday and Friday, and rest on the weekend (easy walks are great). Every session is 45 minutes of lifting, then 30 minutes of Zone 2. Do 3 sets and stop each set with about 2 good reps left. When you hit the top of the rep range on every set, add a little weight next time.',
+  $tpl$[{"name": "Mon · Upper A (chest focus)", "items": [{"name": "Barbell or Dumbbell Bench Press", "sets": "3", "reps": "6–10", "rest": "2 min", "note": "", "ref": "chest"}, {"name": "Incline Dumbbell Press", "sets": "3", "reps": "8–12", "rest": "90 sec", "note": "", "ref": "chest"}, {"name": "Pull-Up or Lat Pulldown", "sets": "3", "reps": "8–12", "rest": "90 sec", "note": "", "ref": "back"}, {"name": "Seated Cable Row", "sets": "3", "reps": "10–12", "rest": "90 sec", "note": "", "ref": "back"}, {"name": "Dumbbell Lateral Raise", "sets": "3", "reps": "12–15", "rest": "60 sec", "note": "", "ref": "shoulders"}, {"name": "Triceps Pushdown", "sets": "2", "reps": "12–15", "rest": "60 sec", "note": "", "ref": "arms"}, {"name": "Zone 2 walk (incline treadmill or outside)", "sets": "1", "reps": "30 min", "rest": "", "note": "Right after lifting. You can talk in full sentences, but not sing.", "ref": ""}]}, {"name": "Tue · Lower A (quads)", "items": [{"name": "Back Squat or Goblet Squat", "sets": "3", "reps": "8–10", "rest": "2 min", "note": "", "ref": "legs"}, {"name": "Romanian Deadlift", "sets": "3", "reps": "8–10", "rest": "2 min", "note": "", "ref": "legs"}, {"name": "Leg Press", "sets": "3", "reps": "10–12", "rest": "90 sec", "note": "", "ref": "legs"}, {"name": "Lying or Seated Leg Curl", "sets": "3", "reps": "10–12", "rest": "60 sec", "note": "", "ref": "legs"}, {"name": "Standing Calf Raise", "sets": "3", "reps": "12–15", "rest": "60 sec", "note": "", "ref": "legs"}, {"name": "Plank", "sets": "3", "reps": "30–45 sec", "rest": "45 sec", "note": "", "ref": "core"}, {"name": "Zone 2 walk (incline treadmill or outside)", "sets": "1", "reps": "30 min", "rest": "", "note": "Right after lifting. You can talk in full sentences, but not sing.", "ref": ""}]}, {"name": "Thu · Upper B (back & shoulders)", "items": [{"name": "Seated Dumbbell Shoulder Press", "sets": "3", "reps": "8–10", "rest": "2 min", "note": "", "ref": "shoulders"}, {"name": "Dumbbell Bench Press", "sets": "3", "reps": "8–12", "rest": "90 sec", "note": "", "ref": "full-body"}, {"name": "Single-Arm Dumbbell Row", "sets": "3", "reps": "10–12 per arm", "rest": "90 sec", "note": "", "ref": "back"}, {"name": "Face Pull", "sets": "3", "reps": "15", "rest": "60 sec", "note": "", "ref": "back"}, {"name": "EZ-Bar Curl", "sets": "3", "reps": "10–12", "rest": "60 sec", "note": "", "ref": "arms"}, {"name": "Overhead Cable or Dumbbell Triceps Extension", "sets": "2", "reps": "12–15", "rest": "60 sec", "note": "", "ref": "arms"}, {"name": "Zone 2 walk (incline treadmill or outside)", "sets": "1", "reps": "30 min", "rest": "", "note": "Right after lifting. You can talk in full sentences, but not sing.", "ref": ""}]}, {"name": "Fri · Lower B (glutes & hamstrings)", "items": [{"name": "Barbell Hip Thrust", "sets": "3", "reps": "8–12", "rest": "2 min", "note": "", "ref": "glutes"}, {"name": "Bulgarian Split Squat", "sets": "3", "reps": "8–10 per leg", "rest": "90 sec", "note": "", "ref": "glutes"}, {"name": "Hip Abduction Machine or Banded Walk", "sets": "3", "reps": "15–20", "rest": "60 sec", "note": "", "ref": "glutes"}, {"name": "Lying or Seated Leg Curl", "sets": "3", "reps": "10–12", "rest": "60 sec", "note": "", "ref": "legs"}, {"name": "Standing Calf Raise", "sets": "3", "reps": "12–15", "rest": "60 sec", "note": "", "ref": "legs"}, {"name": "Dead Bug", "sets": "3", "reps": "8 each side", "rest": "45 sec", "note": "", "ref": "core"}, {"name": "Zone 2 walk (incline treadmill or outside)", "sets": "1", "reps": "30 min", "rest": "", "note": "Right after lifting. You can talk in full sentences, but not sing.", "ref": ""}]}]$tpl$::jsonb
+where not exists (select 1 from public.plan_templates where lower(name) = lower('Phase 1: Build the Base (4-day Upper/Lower)'));
 
 -- ---------- progress photos (private bucket) ----------
 -- Files are stored as <client id>/<random id>.jpg. Uploads never overwrite,

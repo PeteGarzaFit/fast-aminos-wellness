@@ -106,6 +106,7 @@ const BUCKET = "progress-photos";
 const fromClientRow = r => ({ id: r.id, userId: r.user_id, email: r.email, name: r.name, sex: r.sex, dob: r.dob, height: num(r.height_in), goal: r.goal });
 const toClientRow = c => ({ email: c.email, name: c.name, sex: c.sex, dob: c.dob || null, height_in: c.height, goal: c.goal || null });
 const fromCheckinRow = r => ({ id: r.id, clientId: r.client_id, date: r.date, weight: num(r.weight_lb), waist: num(r.waist_in), neck: num(r.neck_in), hip: num(r.hip_in), omron: num(r.omron_bf), photoFront: r.photo_front, photoSide: r.photo_side, note: r.note, coachNote: r.coach_note || null, coachNoteAt: r.coach_note_at || null, enteredBy: r.entered_by, createdAt: r.created_at });
+const fromTplRow = r => ({ id: r.id, name: r.name, title: r.title || "", notes: r.notes || "", days: Array.isArray(r.days) ? r.days : [] });
 const fromPlanRow = r => r ? ({ title: r.title || "", notes: r.notes || "", days: Array.isArray(r.days) ? r.days : [], updatedAt: r.updated_at }) : null;
 /* Supabase reports a missing table/column when the October 2026 database update hasn't been run yet. */
 const isMissing = e => !!e && (e.code === "42P01" || e.code === "42703" || e.code === "PGRST205" || e.code === "PGRST204" || /does not exist|schema cache/i.test(e.message || ""));
@@ -146,7 +147,13 @@ function supaApi(sb) {
     async getPlan(clientId) { return fromPlanRow(chk(await sb.from("client_plans").select("*").eq("client_id", clientId).maybeSingle())); },
     async savePlan(clientId, p) { return fromPlanRow(chk(await sb.from("client_plans").upsert({ client_id: clientId, title: p.title || null, notes: p.notes || null, days: p.days }, { onConflict: "client_id" }).select().single())); },
     async deletePlan(clientId) { chk(await sb.from("client_plans").delete().eq("client_id", clientId)); },
-    async saveFeedback(checkinId, note) { return fromCheckinRow(chk(await sb.from("checkins").update({ coach_note: note || null }).eq("id", checkinId).select().single())); }
+    async saveFeedback(checkinId, note) { return fromCheckinRow(chk(await sb.from("checkins").update({ coach_note: note || null }).eq("id", checkinId).select().single())); },
+    async listTemplates() { return chk(await sb.from("plan_templates").select("*").order("name")).map(fromTplRow); },
+    async saveTemplate(t, id) {
+      const row = { name: t.name, title: t.title || null, notes: t.notes || null, days: t.days };
+      return fromTplRow(id ? chk(await sb.from("plan_templates").update(row).eq("id", id).select().single()) : chk(await sb.from("plan_templates").insert(row).select().single()));
+    },
+    async deleteTemplate(id) { chk(await sb.from("plan_templates").delete().eq("id", id)); }
   };
 }
 
@@ -165,6 +172,7 @@ function demoApi(asClient) {
     { name: "Lower body", items: [...fromLib("gym/glutes", 3), { name: "Incline treadmill walk", sets: "1", reps: "30 min", rest: "", note: "Zone 2: you can talk, but not sing.", ref: "" }] },
     { name: "Upper body", items: fromLib("gym/back", 3).concat(fromLib("gym/chest", 2)) },
     { name: "Full body at home", items: fromLib("home/full-body") } ], updatedAt: "2026-09-28T18:00:00Z" } };
+  const templates = [{ id: "t1", name: "Sample 3-day plan", title: plans.c1.title, notes: plans.c1.notes, days: JSON.parse(JSON.stringify(plans.c1.days)) }];
   const photos = {};
   const wait = () => new Promise(r => setTimeout(r, 120));
   return {
@@ -180,7 +188,10 @@ function demoApi(asClient) {
     async getPlan(id) { await wait(); return plans[id] ? JSON.parse(JSON.stringify(plans[id])) : null; },
     async savePlan(id, p) { await wait(); plans[id] = { ...JSON.parse(JSON.stringify(p)), updatedAt: new Date().toISOString() }; return JSON.parse(JSON.stringify(plans[id])); },
     async deletePlan(id) { await wait(); delete plans[id]; },
-    async saveFeedback(eid, note) { await wait(); const e = entries.find(x => x.id === eid); e.coachNote = note || null; e.coachNoteAt = note ? new Date().toISOString() : null; return { ...e }; }
+    async saveFeedback(eid, note) { await wait(); const e = entries.find(x => x.id === eid); e.coachNote = note || null; e.coachNoteAt = note ? new Date().toISOString() : null; return { ...e }; },
+    async listTemplates() { await wait(); return templates.map(t => JSON.parse(JSON.stringify(t))).sort((a, b) => a.name.localeCompare(b.name)); },
+    async saveTemplate(t, id) { await wait(); const c = JSON.parse(JSON.stringify(t)); if (id) { Object.assign(templates.find(x => x.id === id), c); return { ...c, id }; } const n = { ...c, id: uid() }; templates.push(n); return n; },
+    async deleteTemplate(id) { await wait(); const i = templates.findIndex(x => x.id === id); if (i >= 0) templates.splice(i, 1); }
   };
 }
 
@@ -194,7 +205,7 @@ const TRAINER = CFG.trainerName || "your trainer";
 let VIA_LINK = /access_token|type=(magiclink|signup|recovery|invite)/.test(location.hash) || /[?&](code|token_hash)=/.test(location.search);
 const IS_HOME_APP = window.navigator.standalone === true || (window.matchMedia && matchMedia("(display-mode: standalone)").matches);
 let sb = null, api = null;
-const S = { me: null, isTrainer: false, clients: [], sel: null, checkins: [], plan: null, planMissing: false, urls: {}, screen: "loading", metric: "bf", view: "front", cmpA: null, cmpB: null, overlay: false, fade: 50, authEmail: "", authStep: "email", pwMode: null, pwBack: null };
+const S = { me: null, isTrainer: false, clients: [], sel: null, checkins: [], plan: null, planMissing: false, templates: [], urls: {}, screen: "loading", metric: "bf", view: "front", cmpA: null, cmpB: null, overlay: false, fade: 50, authEmail: "", authStep: "email", pwMode: null, pwBack: null };
 const store = { get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (_) {} } };
 const client = () => S.clients.find(c => c.id === S.sel) || null;
 const canDelete = e => S.isTrainer || (S.me && e.enteredBy === S.me.id);
@@ -535,6 +546,7 @@ async function loadAll() {
   const saved = store.get("fa_client");
   S.sel = S.clients.find(c => c.id === S.sel) ? S.sel : S.clients.find(c => c.id === saved) ? saved : (S.clients[0]?.id || null);
   S.screen = "app";
+  if (S.isTrainer) { try { S.templates = await api.listTemplates(); } catch (err) { S.templates = []; if (!isMissing(err)) console.error(err); } }
   await loadCheckins();
 }
 
@@ -701,6 +713,7 @@ $("#rClear").onclick = () => saveReply("");
 /* Plan builder (trainer). */
 const LIB = window.WORKOUT_LIBRARY || [];
 let draft = null, planClient = null;
+const cleanDays = () => draft.days.map(d => ({ name: String(d.name || "").trim(), items: (d.items || []).map(x => ({ name: String(x.name || "").trim(), sets: String(x.sets || "").trim(), reps: String(x.reps || "").trim(), rest: String(x.rest || "").trim(), note: String(x.note || "").trim(), ref: x.ref || "" })).filter(x => x.name) })).filter(d => d.items.length);
 const blankItem = () => ({ name: "", sets: "3", reps: "10", rest: "60 sec", note: "", ref: "" });
 function openPlan(c) {
   planClient = c;
@@ -708,8 +721,33 @@ function openPlan(c) {
   $("#plTitle").textContent = `Workout plan for ${firstName(c.name)}`;
   $("#plErr").textContent = ""; $("#plDelete").hidden = !(S.plan && S.plan.days.length);
   const del = $("#plDelete"); del.classList.remove("armed"); del.textContent = "Delete plan"; del.disabled = false;
-  drawPlanEditor(); $("#dlgPlan").showModal();
+  drawTemplateRow(); drawPlanEditor(); $("#dlgPlan").showModal();
 }
+function drawTemplateRow() {
+  const sel = $("#pl-tpl");
+  sel.innerHTML = `<option value="">${S.templates.length ? "Start from a template…" : "No templates yet. Save one below."}</option>` + S.templates.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("");
+  sel.disabled = !S.templates.length;
+}
+$("#pl-tpl").onchange = () => {
+  const t = S.templates.find(x => x.id === $("#pl-tpl").value); if (!t) return;
+  draft = { title: t.title || t.name, notes: t.notes || "", days: JSON.parse(JSON.stringify(t.days)) };
+  $("#plErr").textContent = ""; drawPlanEditor();
+  toast(`Loaded "${t.name}". Adjust it for ${firstName(planClient.name)}, then Save plan.`);
+};
+$("#plSaveTpl").onclick = async () => {
+  const err = $("#plErr"), name = (draft.title || "").trim();
+  if (!name) { err.textContent = "Give the plan a name first. The template uses the same name."; return; }
+  const days = cleanDays();
+  if (!days.length) { err.textContent = "Add at least one exercise."; return; }
+  const existing = S.templates.find(t => t.name.toLowerCase() === name.toLowerCase());
+  const btn = $("#plSaveTpl"); btn.disabled = true; err.textContent = "";
+  try {
+    await api.saveTemplate({ name, title: name, notes: (draft.notes || "").trim(), days }, existing?.id);
+    S.templates = await api.listTemplates(); drawTemplateRow();
+    toast(existing ? `Template "${name}" updated` : `Saved "${name}" as a template. Pick it for any client.`);
+  } catch (e) { console.error(e); err.textContent = isMissing(e) ? "Templates need the latest database update in tracker/SETUP.md." : "Couldn't save the template. Try again."; }
+  btn.disabled = false;
+};
 function drawPlanEditor() {
   const libOpts = `<option value="">Add a workout from your site…</option>` + ["Gym", "Home"].map(m => `<optgroup label="${m} workouts">${LIB.filter(w => w.label.endsWith(`(${m})`)).map(w => `<option value="${esc(w.id)}">${esc(w.label)}</option>`).join("")}</optgroup>`).join("");
   $("#planEd").innerHTML = `
@@ -761,7 +799,7 @@ $("#plDelete").onclick = async () => {
 $("#fPlan").onsubmit = async ev => {
   ev.preventDefault();
   const err = $("#plErr");
-  const days = draft.days.map(d => ({ name: d.name.trim(), items: d.items.map(x => ({ name: x.name.trim(), sets: String(x.sets || "").trim(), reps: String(x.reps || "").trim(), rest: String(x.rest || "").trim(), note: String(x.note || "").trim(), ref: x.ref || "" })).filter(x => x.name) })).filter(d => d.items.length);
+  const days = cleanDays();
   if (!days.length) { err.textContent = "Add at least one exercise."; return; }
   const p = { title: draft.title.trim(), notes: draft.notes.trim(), days };
   const btn = $("#plSave"); btn.disabled = true; btn.textContent = "Saving…"; err.textContent = "";

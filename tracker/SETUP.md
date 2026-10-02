@@ -80,6 +80,12 @@ day from any gym or home workout on the site, or type your own exercises. Sets, 
 rest and a note are all editable. The client sees the plan when they sign in, with
 links to each exercise's photos on the site.
 
+**Templates:** in the plan builder, **Start from a template** fills in a saved program, which you can
+then adjust for that client. **Save as template** stores the plan under its name for future clients;
+saving again with the same name updates it. "Phase 1: Build the Base (4-day Upper/Lower)" comes
+preloaded. Templates are only visible to you. (Added with a second database update: run
+`supabase/schema.sql` again the same way.)
+
 **Replies:** tap **Reply** under any check-in. Your note shows under that check-in, and
 your latest reply appears at the top of the client's tracker. Only you can write replies.
 

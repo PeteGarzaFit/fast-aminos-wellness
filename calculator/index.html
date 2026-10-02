@@ -214,7 +214,7 @@ const GOALS=[
   {id:"maint",label:"Maintain",adj:0},
   {id:"gain",label:"Build muscle",adj:250}
 ];
-let goal="lose05";
+let goal=(q=>GOALS.some(g=>g.id===q)?q:"lose05")(new URLSearchParams(location.search).get("goal"));
 
 /* Core math, exposed for testing. */
 function compute(p){

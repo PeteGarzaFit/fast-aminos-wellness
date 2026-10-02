@@ -46,9 +46,9 @@ main{padding-bottom:48px}
 .card h2{font-family:var(--serif);font-weight:500;font-size:24px;letter-spacing:-.02em;margin:16px 0 4px}
 .warm{color:var(--ink-2);font-size:14.5px;margin:0 0 16px}
 ol.ex{list-style:none;margin:0;padding:0;counter-reset:ex}
-ol.ex li{counter-increment:ex;display:grid;grid-template-columns:34px minmax(0,1fr) 300px;grid-template-rows:auto auto 1fr;gap:4px 16px;padding:18px 0;border-top:1px solid var(--grid)}ol.ex li>h3,ol.ex li>.sr,ol.ex li>.tip{grid-column:2}
-ol.ex li:before{content:counter(ex);grid-column:1;grid-row:1/span 3;width:30px;height:30px;border-radius:9px;background:var(--blue-soft);color:var(--blue);font-weight:800;font-size:13px;display:grid;place-items:center}
-ol.ex h3{margin:0;font-size:17px;line-height:1.3}.pics{grid-column:3;grid-row:1/span 3;display:grid;grid-template-columns:1fr 1fr;gap:6px;align-self:start}.pics figure{margin:0;position:relative;border-radius:10px;overflow:hidden;background:var(--grid)}.pics img{display:block;width:100%;height:auto;aspect-ratio:4/3;object-fit:cover}.pics figcaption{position:absolute;left:6px;bottom:6px;background:rgba(17,24,39,.72);color:#fff;font-size:10px;font-weight:750;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:999px}@media (max-width:760px){ol.ex li{grid-template-columns:34px minmax(0,1fr);grid-template-rows:none}.pics{grid-column:1/-1;grid-row:auto;margin-top:8px}}
+ol.ex li{counter-increment:ex;display:grid;grid-template-columns:34px minmax(0,1fr) 300px;grid-template-rows:auto auto auto 1fr;gap:4px 16px;padding:18px 0;border-top:1px solid var(--grid)}ol.ex li>h3,ol.ex li>.sr,ol.ex li>.tip{grid-column:2}
+ol.ex li:before{content:counter(ex);grid-column:1;grid-row:1/span 4;width:30px;height:30px;border-radius:9px;background:var(--blue-soft);color:var(--blue);font-weight:800;font-size:13px;display:grid;place-items:center}
+ol.ex h3{margin:0;font-size:17px;line-height:1.3}.pics{grid-column:3;grid-row:1/span 4;display:grid;grid-template-columns:1fr 1fr;gap:6px;align-self:start}.pics figure{margin:0;position:relative;border-radius:10px;overflow:hidden;background:var(--grid)}.pics img{display:block;width:100%;height:auto;aspect-ratio:4/3;object-fit:cover}.pics figcaption{position:absolute;left:6px;bottom:6px;background:rgba(17,24,39,.72);color:#fff;font-size:10px;font-weight:750;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:999px}@media (max-width:760px){ol.ex li{grid-template-columns:34px minmax(0,1fr);grid-template-rows:none}.pics{grid-column:1/-1;grid-row:auto;margin-top:8px}}
 .sr{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13.5px;color:var(--ink-2);font-variant-numeric:tabular-nums}
 .sr b{color:var(--ink)}
 .tip{margin:0;font-size:14px;color:var(--muted)}
@@ -65,6 +65,14 @@ ol.ex h3{margin:0;font-size:17px;line-height:1.3}.pics{grid-column:3;grid-row:1/
 .pn a{text-decoration:none}
 footer{border-top:1px solid var(--line);background:var(--white);padding-block:20px 28px;font-size:12px;color:var(--muted)}
 footer p{margin:0;max-width:900px}
+.mode{display:inline-flex;background:var(--white);border:1px solid var(--line);border-radius:12px;padding:3px;gap:3px;margin-top:16px}
+.mode a{padding:8px 18px;border-radius:9px;font-size:14px;font-weight:750;color:var(--muted);text-decoration:none}
+.mode a[aria-current]{background:var(--blue);color:#fff}
+.mode a:not([aria-current]):hover{color:var(--blue)}
+.lvl{margin:2px 0 0;font-size:13.5px;color:var(--ink-2)}.lvl b{color:var(--blue)}
+ol.ex li>.lvl{grid-column:2}
+.nopic{grid-column:3;grid-row:1/span 4;align-self:start;border:1px dashed #D7DFEA;border-radius:10px;color:var(--faint);font-size:12.5px;padding:14px;text-align:center}
+@media (max-width:760px){.nopic{display:none}}
 </style>
 </head>
 <body>
@@ -77,15 +85,17 @@ footer p{margin:0;max-width:900px}
 <main class="wrap">
 <section class="hero">
   <div class="crumb"><a href="../">← All workouts</a></div>
-  <div class="kicker">Workout</div>
+  <div class="kicker">Gym workout</div>
   <h1>Shoulders</h1>
   <p>Rounder delts and healthier shoulders.</p>
+  <nav class="mode" aria-label="Workout type"><a href="./" aria-current="page">Gym</a><a href="home/">Home</a></nav>
 </section>
 <nav class="chips" aria-label="Body parts"><a href="../chest/">Chest</a><a href="../back/">Back</a><a href="../shoulders/" aria-current="page">Shoulders</a><a href="../arms/">Arms</a><a href="../legs/">Legs</a><a href="../glutes/">Glutes</a><a href="../core/">Core</a><a href="../full-body/">Full Body</a></nav>
 <div class="summary">
   <div class="pill"><div class="lbl">Exercises</div><div class="v">5</div></div>
   <div class="pill"><div class="lbl">Total sets</div><div class="v">17</div></div>
   <div class="pill"><div class="lbl">Time</div><div class="v">35–45 min</div></div>
+  <div class="pill"><div class="lbl">Equipment</div><div class="v">Gym</div></div>
 </div>
 <section class="card">
   <h2>The workout</h2>
@@ -101,7 +111,7 @@ footer p{margin:0;max-width:900px}
 <div class="how">
   <div><h3>Pick the right weight</h3><p>Choose a weight you can lift for the listed reps with 1–2 good reps left in the tank.</p></div>
   <div><h3>Progress each week</h3><p>When you hit the top of the rep range on every set, add a little weight next time.</p></div>
-  <div><h3>Protect your muscle</h3><p>Especially while dieting or on a GLP-1: lift 2–4 days a week and hit your daily protein target.</p></div>
+  <div><h3>Protect your muscle</h3><p>Especially while dieting or on a GLP-1: train 2–4 days a week and hit your daily protein target.</p></div>
 </div>
 <div class="cta"><div><h3>Know your protein number?</h3><p>Training builds the signal; protein supplies the material. Get your daily calories and protein target in about 2 minutes.</p></div><a class="btn light" href="../../calculator/">Find my numbers&nbsp;→</a></div>
 <div class="pn"><a href="../back/">← Back</a><a href="../arms/">Arms →</a></div>

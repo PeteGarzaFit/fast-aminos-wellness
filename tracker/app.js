@@ -106,6 +106,7 @@ const BUCKET = "progress-photos";
 const fromClientRow = r => ({ id: r.id, userId: r.user_id, email: r.email, name: r.name, sex: r.sex, dob: r.dob, height: num(r.height_in), goal: r.goal });
 const toClientRow = c => ({ email: c.email, name: c.name, sex: c.sex, dob: c.dob || null, height_in: c.height, goal: c.goal || null });
 const fromCheckinRow = r => ({ id: r.id, clientId: r.client_id, date: r.date, weight: num(r.weight_lb), waist: num(r.waist_in), neck: num(r.neck_in), hip: num(r.hip_in), omron: num(r.omron_bf), photoFront: r.photo_front, photoSide: r.photo_side, note: r.note, coachNote: r.coach_note || null, coachNoteAt: r.coach_note_at || null, enteredBy: r.entered_by, createdAt: r.created_at });
+const fromWorkoutRow = r => ({ id: r.id, clientId: r.client_id, date: r.date, dayName: r.day_name || "", entries: Array.isArray(r.entries) ? r.entries : [], note: r.note || "", enteredBy: r.entered_by, createdAt: r.created_at });
 const fromTplRow = r => ({ id: r.id, name: r.name, title: r.title || "", notes: r.notes || "", days: Array.isArray(r.days) ? r.days : [] });
 const fromPlanRow = r => r ? ({ title: r.title || "", notes: r.notes || "", days: Array.isArray(r.days) ? r.days : [], updatedAt: r.updated_at }) : null;
 /* Supabase reports a missing table/column when the October 2026 database update hasn't been run yet. */
@@ -149,6 +150,9 @@ function supaApi(sb) {
     async deletePlan(clientId) { chk(await sb.from("client_plans").delete().eq("client_id", clientId)); },
     async saveFeedback(checkinId, note) { return fromCheckinRow(chk(await sb.from("checkins").update({ coach_note: note || null }).eq("id", checkinId).select().single())); },
     async listTemplates() { return chk(await sb.from("plan_templates").select("*").order("name")).map(fromTplRow); },
+    async listWorkouts(clientId) { return chk(await sb.from("workout_logs").select("*").eq("client_id", clientId).order("date", { ascending: false }).order("created_at", { ascending: false }).limit(300)).map(fromWorkoutRow); },
+    async addWorkout(w) { return fromWorkoutRow(chk(await sb.from("workout_logs").insert({ client_id: w.clientId, date: w.date, day_name: w.dayName || null, entries: w.entries, note: w.note || null }).select().single())); },
+    async deleteWorkout(id) { chk(await sb.from("workout_logs").delete().eq("id", id)); },
     async saveTemplate(t, id) {
       const row = { name: t.name, title: t.title || null, notes: t.notes || null, days: t.days };
       return fromTplRow(id ? chk(await sb.from("plan_templates").update(row).eq("id", id).select().single()) : chk(await sb.from("plan_templates").insert(row).select().single()));
@@ -172,6 +176,18 @@ function demoApi(asClient) {
     { name: "Lower body", items: [...fromLib("gym/glutes", 3), { name: "Incline treadmill walk", sets: "1", reps: "30 min", rest: "", note: "Zone 2: you can talk, but not sing.", ref: "" }] },
     { name: "Upper body", items: fromLib("gym/back", 3).concat(fromLib("gym/chest", 2)) },
     { name: "Full body at home", items: fromLib("home/full-body") } ], updatedAt: "2026-09-28T18:00:00Z" } };
+  /* Sample logged workouts: Upper body and Lower body over four weeks, getting stronger. */
+  const logDay = (date, dayIdx, bump) => {
+    const day = plans.c1.days[dayIdx];
+    const entries = day.items.map((x, k) => {
+      if (/min|sec/i.test(x.reps)) return { name: x.name, ref: x.ref, target: `${x.sets} × ${x.reps}`, timed: true, done: true, sets: [] };
+      const base = [95, 25, 40, 60, 70][k] ?? 30;
+      const sets = Array.from({ length: parseInt(x.sets, 10) || 3 }, (_, si) => ({ lb: base + bump * 5, reps: Math.max(6, 10 - si + (bump >= 3 ? 2 : 0)) }));
+      return { name: x.name, ref: x.ref, target: `${x.sets} × ${x.reps}`, timed: false, done: true, sets };
+    });
+    return { id: "w" + date + dayIdx, clientId: "c1", date, dayName: day.name, note: "", enteredBy: "me", createdAt: date + "T17:00:00Z", entries };
+  };
+  let workouts = [logDay("2026-09-07", 0, 0), logDay("2026-09-08", 1, 0), logDay("2026-09-14", 0, 1), logDay("2026-09-15", 1, 1), logDay("2026-09-21", 0, 2), logDay("2026-09-22", 1, 2), logDay("2026-09-28", 0, 3), logDay("2026-09-29", 1, 3)];
   const templates = [{ id: "t1", name: "Sample 3-day plan", title: plans.c1.title, notes: plans.c1.notes, days: JSON.parse(JSON.stringify(plans.c1.days)) }];
   const photos = {};
   const wait = () => new Promise(r => setTimeout(r, 120));
@@ -189,6 +205,9 @@ function demoApi(asClient) {
     async savePlan(id, p) { await wait(); plans[id] = { ...JSON.parse(JSON.stringify(p)), updatedAt: new Date().toISOString() }; return JSON.parse(JSON.stringify(plans[id])); },
     async deletePlan(id) { await wait(); delete plans[id]; },
     async saveFeedback(eid, note) { await wait(); const e = entries.find(x => x.id === eid); e.coachNote = note || null; e.coachNoteAt = note ? new Date().toISOString() : null; return { ...e }; },
+    async listWorkouts(id) { await wait(); return workouts.filter(w => w.clientId === id).sort((a, b) => b.date.localeCompare(a.date) || String(b.createdAt).localeCompare(String(a.createdAt))).map(w => JSON.parse(JSON.stringify(w))); },
+    async addWorkout(w) { await wait(); const n = { ...JSON.parse(JSON.stringify(w)), id: uid(), enteredBy: "me", createdAt: new Date().toISOString() }; workouts.push(n); return n; },
+    async deleteWorkout(id) { await wait(); workouts = workouts.filter(w => w.id !== id); },
     async listTemplates() { await wait(); return templates.map(t => JSON.parse(JSON.stringify(t))).sort((a, b) => a.name.localeCompare(b.name)); },
     async saveTemplate(t, id) { await wait(); const c = JSON.parse(JSON.stringify(t)); if (id) { Object.assign(templates.find(x => x.id === id), c); return { ...c, id }; } const n = { ...c, id: uid() }; templates.push(n); return n; },
     async deleteTemplate(id) { await wait(); const i = templates.findIndex(x => x.id === id); if (i >= 0) templates.splice(i, 1); }
@@ -205,7 +224,7 @@ const TRAINER = CFG.trainerName || "your trainer";
 let VIA_LINK = /access_token|type=(magiclink|signup|recovery|invite)/.test(location.hash) || /[?&](code|token_hash)=/.test(location.search);
 const IS_HOME_APP = window.navigator.standalone === true || (window.matchMedia && matchMedia("(display-mode: standalone)").matches);
 let sb = null, api = null;
-const S = { me: null, isTrainer: false, clients: [], sel: null, checkins: [], plan: null, planMissing: false, templates: [], urls: {}, screen: "loading", metric: "bf", view: "front", cmpA: null, cmpB: null, overlay: false, fade: 50, authEmail: "", authStep: "email", pwMode: null, pwBack: null };
+const S = { me: null, isTrainer: false, clients: [], sel: null, checkins: [], plan: null, planMissing: false, templates: [], workouts: [], workoutsMissing: false, urls: {}, screen: "loading", metric: "bf", view: "front", cmpA: null, cmpB: null, overlay: false, fade: 50, authEmail: "", authStep: "email", pwMode: null, pwBack: null };
 const store = { get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (_) {} } };
 const client = () => S.clients.find(c => c.id === S.sel) || null;
 const canDelete = e => S.isTrainer || (S.me && e.enteredBy === S.me.id);
@@ -239,7 +258,7 @@ function render() {
   if (S.screen === "noaccess") { app.innerHTML = noAccessScreen(); return; }
   if (!S.clients.length) { app.innerHTML = welcome(); const b = $("#welcomeAdd"); if (b) b.onclick = () => openClient(null); return; }
   const c = client(); const s = series(c, S.checkins);
-  app.innerHTML = `<div class="stack">${head(c, s)}${coachCallout(c)}${tiles(c, s)}${planCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div></div>`;
+  app.innerHTML = `<div class="stack">${head(c, s)}${coachCallout(c)}${tiles(c, s)}${planCard(c)}${workoutsCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div></div>`;
   wire(c, s);
 }
 
@@ -502,6 +521,13 @@ function wire(c, s) {
   const on = (sel, fn) => { const el = $(sel); if (el) el.onclick = fn; };
   on("#editClient", () => openClient(c)); on("#newEntry", () => openEntry(c)); on("#firstEntry", () => openEntry(c));
   on("#editPlan", () => openPlan(c)); on("#buildPlan", () => openPlan(c));
+  $$("[data-start]").forEach(b => b.onclick = () => openWorkout(c, +b.dataset.start));
+  $$("[data-delw]").forEach(btn => btn.onclick = async () => {
+    if (!btn.classList.contains("armed")) { btn.classList.add("armed"); btn.textContent = "Confirm"; setTimeout(() => { if (btn.isConnected) { btn.classList.remove("armed"); btn.textContent = "Delete"; } }, 4000); return; }
+    btn.disabled = true;
+    try { await api.deleteWorkout(btn.dataset.delw); S.workouts = S.workouts.filter(w => w.id !== btn.dataset.delw); toast("Workout deleted"); render(); }
+    catch (e) { btn.disabled = false; toast("Couldn't delete that workout. Try again."); }
+  });
   $$("[data-reply]").forEach(b => b.onclick = () => openReply(c, S.checkins.find(x => x.id === b.dataset.reply)));
   $$("[data-metric]").forEach(b => b.onclick = () => { S.metric = b.dataset.metric; render(); });
   $$("[data-view]").forEach(b => b.onclick = () => { S.view = b.dataset.view; render(); });
@@ -533,6 +559,7 @@ async function loadCheckins() {
   try {
     S.checkins = await api.listCheckins(S.sel);
     await loadPlan();
+    await loadWorkouts();
     const paths = S.checkins.flatMap(e => [e.photoFront, e.photoSide]).filter(p => p && !S.urls[p]);
     if (paths.length) Object.assign(S.urls, await api.photoUrls(paths));
   } catch (err) { console.error(err); toast("Couldn't load check-ins. Check your connection and reload."); }
@@ -671,7 +698,8 @@ function coachCallout(c) {
 
 const refUrl = ref => /^[a-z-]+(\/home)?$/.test(ref || "") ? `../workouts/${ref}/` : "";
 function planDays(p) {
-  return `<div class="days">${p.days.map((d, i) => `<div class="day"><div class="day-h"><span class="dnum">Day ${i + 1}</span><h3>${esc(d.name || "Workout")}</h3></div>
+  const canLog = !S.workoutsMissing;
+  return `<div class="days">${p.days.map((d, i) => `<div class="day"><div class="day-h"><span class="dnum">Day ${i + 1}</span><h3>${esc(d.name || "Workout")}</h3>${canLog ? `<button type="button" class="btn primary sm startw" data-start="${i}">${S.isTrainer ? "Log workout" : "Start workout"}</button>` : ""}${lastDone(d.name)}</div>
     <ol class="plist">${(d.items || []).map(x => { const u = refUrl(x.ref);
       const sr = [x.sets ? `${esc(x.sets)} × ${esc(x.reps || "")}` : esc(x.reps || ""), x.rest ? `rest ${esc(x.rest)}` : ""].filter(Boolean).join(" · ");
       return `<li><div class="pname">${esc(x.name)}</div>${sr ? `<div class="psr">${sr}</div>` : ""}${x.note ? `<div class="pnote">${esc(x.note)}</div>` : ""}${u ? `<a class="plink" href="${u}" target="_blank" rel="noopener">Form &amp; photos →</a>` : ""}</li>`; }).join("")}</ol></div>`).join("")}</div>`;
@@ -807,6 +835,108 @@ $("#fPlan").onsubmit = async ev => {
   catch (e) { console.error(e); err.textContent = isMissing(e) ? "Run the database update in tracker/SETUP.md first." : "Couldn't save. Check your connection and try again."; }
   btn.disabled = false; btn.textContent = "Save plan";
 };
+
+/* ---------- workout logging ---------- */
+async function loadWorkouts() {
+  S.workouts = [];
+  try { S.workouts = await api.listWorkouts(S.sel); S.workoutsMissing = false; }
+  catch (err) { if (isMissing(err)) S.workoutsMissing = true; else console.error(err); }
+}
+const isTimed = x => /min|sec|yard|yd\b/i.test(String(x.reps || ""));
+const topRep = x => { const n = String(x.reps || "").match(/\d+/g); return n ? Math.max(...n.map(Number)) : null; };
+const nSets = x => Math.min(10, Math.max(1, parseInt(x.sets, 10) || 3));
+const fmtSet = st => `${st.lb != null ? f1(st.lb).replace(/\.0$/, "") : "BW"} × ${st.reps ?? "–"}`;
+/* Most recent logged sets for an exercise, newest workout first. */
+function lastFor(name) {
+  for (const w of S.workouts) { const e = w.entries.find(x => x.name === name && !x.timed && x.sets && x.sets.some(st => st.reps != null)); if (e) return { w, e }; }
+  return null;
+}
+function lastDone(dayName) {
+  const w = S.workouts.find(x => x.dayName === dayName);
+  return w ? `<div class="lastdone">Last done ${fmtD(w.date)}</div>` : "";
+}
+/* "Add weight" nudge: every target set reached the top of the rep range last time. */
+function progressHint(x, prev) {
+  if (!prev || isTimed(x)) return "";
+  const top = topRep(x), done = prev.e.sets.filter(st => st.reps != null);
+  if (top && done.length >= nSets(x) && done.every(st => st.reps >= top)) return `<div class="hint up">You hit ${top} reps on every set last time. Add a little weight today (about 5 lb).</div>`;
+  return "";
+}
+
+let wDraft = null, wClient = null;
+function openWorkout(c, dayIdx) {
+  const day = S.plan.days[dayIdx]; wClient = c;
+  wDraft = { clientId: c.id, date: todayISO(), dayName: day.name || `Day ${dayIdx + 1}`, note: "",
+    entries: day.items.map(x => ({ name: x.name, ref: x.ref || "", target: [x.sets ? `${x.sets} ×` : "", x.reps || ""].join(" ").trim(), timed: isTimed(x), done: false,
+      sets: isTimed(x) ? [] : Array.from({ length: nSets(x) }, () => ({ lb: "", reps: "" })), plan: x })) };
+  $("#wTitle").textContent = wDraft.dayName;
+  $("#wSub").textContent = S.isTrainer ? `Logging for ${firstName(c.name)}` : "Log each set as you go. Leave a set blank if you skipped it.";
+  $("#w-date").value = wDraft.date; $("#w-date").max = todayISO(); $("#w-note").value = ""; $("#wErr").textContent = "";
+  drawWorkout(); $("#dlgWorkout").showModal();
+}
+function drawWorkout() {
+  $("#wList").innerHTML = wDraft.entries.map((e, ei) => {
+    const prev = lastFor(e.name), x = e.plan;
+    const last = prev ? `<div class="wlast">Last time (${fmtD(prev.w.date)}): <b>${prev.e.sets.filter(st => st.reps != null).map(fmtSet).join(", ")}</b></div>` : "";
+    const head = `<div class="wex-h"><div><div class="wname">${esc(e.name)}</div><div class="wtarget">Target ${esc(e.target)}${x.rest ? ` · rest ${esc(x.rest)}` : ""}</div></div>${refUrl(e.ref) ? `<a class="plink" href="${refUrl(e.ref)}" target="_blank" rel="noopener">Form →</a>` : ""}</div>`;
+    if (e.timed) return `<div class="wex">${head}${x.note ? `<div class="pnote">${esc(x.note)}</div>` : ""}<label class="wdone"><input type="checkbox" data-done="${ei}"${e.done ? " checked" : ""}> Done</label></div>`;
+    const ph = prev ? prev.e.sets.filter(st => st.lb != null).map(st => st.lb) : [];
+    const rows = e.sets.map((st, si) => `<div class="wset"><span class="snum">Set ${si + 1}</span>
+      <label class="wf"><input type="number" inputmode="decimal" step="2.5" min="0" max="2000" data-e="${ei}" data-s="${si}" data-k="lb" value="${esc(st.lb)}" placeholder="${ph[si] ?? ph[ph.length - 1] ?? ""}" aria-label="${esc(e.name)} set ${si + 1} weight"><span>lb</span></label>
+      <label class="wf"><input type="number" inputmode="numeric" step="1" min="0" max="200" data-e="${ei}" data-s="${si}" data-k="reps" value="${esc(st.reps)}" placeholder="${topRep(x) ?? ""}" aria-label="${esc(e.name)} set ${si + 1} reps"><span>reps</span></label></div>`).join("");
+    return `<div class="wex">${head}${x.note ? `<div class="pnote">${esc(x.note)}</div>` : ""}${last}${progressHint(x, prev)}${rows}<button type="button" class="linkbtn addset" data-addset="${ei}">+ Add a set</button></div>`;
+  }).join("");
+}
+$("#wList").addEventListener("input", ev => {
+  const t = ev.target;
+  if (t.dataset.k) wDraft.entries[+t.dataset.e].sets[+t.dataset.s][t.dataset.k] = t.value;
+  if (t.dataset.done != null) wDraft.entries[+t.dataset.done].done = t.checked;
+});
+$("#wList").addEventListener("click", ev => { const b = ev.target.closest("[data-addset]"); if (!b) return; const e = wDraft.entries[+b.dataset.addset]; if (e.sets.length < 12) { e.sets.push({ lb: "", reps: "" }); drawWorkout(); } });
+$("#wCancel").onclick = () => $("#dlgWorkout").close();
+$("#fWorkout").onsubmit = async ev => {
+  ev.preventDefault();
+  const err = $("#wErr"), date = $("#w-date").value || todayISO();
+  if (date > todayISO()) { err.textContent = "The date can't be in the future."; return; }
+  const entries = wDraft.entries.map(e => {
+    if (e.timed) return e.done ? { name: e.name, ref: e.ref, target: e.target, timed: true, done: true, sets: [] } : null;
+    const sets = e.sets.map(st => ({ lb: num(st.lb), reps: num(st.reps) })).filter(st => st.reps != null || st.lb != null).map(st => ({ lb: st.lb, reps: st.reps != null ? Math.round(st.reps) : null }));
+    return sets.length ? { name: e.name, ref: e.ref, target: e.target, timed: false, done: true, sets } : null;
+  }).filter(Boolean);
+  if (!entries.length) { err.textContent = "Log at least one set (or tick Done) before finishing."; return; }
+  if (entries.some(e => e.sets.some(st => (st.lb != null && (st.lb < 0 || st.lb > 2000)) || (st.reps != null && (st.reps < 0 || st.reps > 200))))) { err.textContent = "Check the numbers: weight 0–2000 lb, reps 0–200."; return; }
+  const btn = $("#wSave"); btn.disabled = true; btn.textContent = "Saving…"; err.textContent = "";
+  try {
+    await api.addWorkout({ clientId: wClient.id, date, dayName: wDraft.dayName, entries, note: $("#w-note").value.trim() });
+    $("#dlgWorkout").close(); await loadWorkouts();
+    const sets = entries.reduce((a, e) => a + e.sets.length, 0);
+    toast(S.isTrainer ? `Workout logged for ${firstName(wClient.name)}` : `Workout saved: ${entries.length} exercises, ${sets} sets. Nice work!`); render();
+  } catch (e) { console.error(e); err.textContent = isMissing(e) ? "Workout logging needs the latest database update in tracker/SETUP.md." : "Couldn't save. Check your connection and try again."; }
+  btn.disabled = false; btn.textContent = "Finish workout";
+};
+
+/* Workout history, consistency and strength gains. */
+function workoutsCard(c) {
+  if (S.workoutsMissing) return S.isTrainer && S.plan && S.plan.days.length ? `<section class="card"><div class="card-h"><h2>Workouts</h2></div><div class="empty">Workout logging needs a one-time database update. Run <code>supabase/schema.sql</code> again in the Supabase SQL Editor, then reload.</div></section>` : "";
+  const ws = S.workouts;
+  if (!ws.length) return S.plan && S.plan.days.length ? `<section class="card"><div class="card-h"><h2>Workouts</h2></div><div class="empty">${S.isTrainer ? `No workouts logged yet. ${esc(firstName(c.name))} taps <b>Start workout</b> on a plan day to log sets and reps.` : `Tap <b>Start workout</b> on a day in your plan to log your sets and reps. Next time you'll see what to beat.`}</div></section>` : "";
+  const t = todayISO(), recent = ws.filter(w => days(w.date, t) < 28).length;
+  const target = S.plan ? S.plan.days.length * 4 : null;
+  // strength: best weight per exercise, first session vs latest
+  const by = {};
+  [...ws].reverse().forEach(w => w.entries.forEach(e => { if (e.timed) return; const best = Math.max(...e.sets.map(st => st.lb ?? -1)); if (best <= 0) return; (by[e.name] ||= []).push({ date: w.date, best }); }));
+  const gains = Object.entries(by).filter(([, a]) => a.length >= 2).map(([n, a]) => ({ n, from: a[0].best, to: a[a.length - 1].best, d: a[a.length - 1].best - a[0].best })).filter(g => g.d > 0).sort((a, b) => b.d - a.d).slice(0, 6);
+  const rows = ws.slice(0, 8).map(w => {
+    const sets = w.entries.reduce((a, e) => a + e.sets.length, 0);
+    return `<details class="wlog"><summary><span class="wd">${fmtD(w.date, true)}</span><span class="wn">${esc(w.dayName || "Workout")}</span><span class="wc">${w.entries.length} exercises · ${sets} sets</span></summary>
+      <ul>${w.entries.map(e => `<li><b>${esc(e.name)}</b> ${e.timed ? "Done" : e.sets.map(fmtSet).join(", ")}</li>`).join("")}</ul>${w.note ? `<p class="small muted">${esc(w.note)}</p>` : ""}
+      <button type="button" class="btn ghost sm danger" data-delw="${esc(w.id)}">Delete</button></details>`;
+  }).join("");
+  return `<section class="card"><div class="card-h"><h2>Workouts</h2><span class="muted small">${ws.length} logged</span></div>
+    <div class="wstats"><div class="tile"><span class="lbl">Last 4 weeks</span><span class="big">${recent}<small>${target ? ` of ${target}` : ""} workouts</small></span><span class="delta">${target ? (recent >= target ? "Right on plan. Great consistency." : `${Math.round(recent / target * 100)}% of the plan`) : ""}</span></div>
+    ${gains.length ? `<div class="gains"><span class="lbl">Strength gains</span><ul>${gains.map(g => `<li><span>${esc(g.n)}</span><b>${f1(g.from).replace(/\.0$/, "")} → ${f1(g.to).replace(/\.0$/, "")} lb</b><em>+${f1(g.d).replace(/\.0$/, "")}</em></li>`).join("")}</ul></div>` : ""}</div>
+    <div class="wlogs">${rows}</div></section>`;
+}
 
 /* ---------- auth + boot ---------- */
 async function signOut() {

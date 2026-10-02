@@ -14,7 +14,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="FA Tracker">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="stylesheet" href="app.css?v=20261002c">
+<link rel="stylesheet" href="app.css?v=20261002d">
 </head>
 <body>
 <header class="bar">
@@ -99,9 +99,20 @@
   </form>
 </dialog>
 
-<script src="config.js?v=20261002c"></script>
+<dialog id="dlgWorkout" class="wide">
+  <form id="fWorkout" novalidate>
+    <div><h3 id="wTitle">Workout</h3><div class="tipbox" id="wSub"></div></div>
+    <div class="field" style="max-width:200px"><label for="w-date">Date</label><input id="w-date" type="date"></div>
+    <div id="wList" class="wlist"></div>
+    <div class="field"><label for="w-note">Note (optional)</label><input id="w-note" type="text" maxlength="500" placeholder="e.g. Felt strong today. Left knee a little sore on lunges."></div>
+    <div class="err" id="wErr"></div>
+    <div class="foot"><span></span><div class="r"><button type="button" class="btn" id="wCancel">Cancel</button><button type="submit" class="btn primary" id="wSave">Finish workout</button></div></div>
+  </form>
+</dialog>
+
+<script src="config.js?v=20261002d"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
-<script src="library.js?v=20261002c"></script>
-<script src="app.js?v=20261002c"></script>
+<script src="library.js?v=20261002d"></script>
+<script src="app.js?v=20261002d"></script>
 </body>
 </html>

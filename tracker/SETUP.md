@@ -86,6 +86,12 @@ saving again with the same name updates it. "Phase 1: Build the Base (4-day Uppe
 preloaded. Templates are only visible to you. (Added with a second database update: run
 `supabase/schema.sql` again the same way.)
 
+**Workout logging:** each day in a client's plan has **Start workout** (client) or **Log workout**
+(you, at the gym). Each exercise shows what they lifted last time, and a green "add a little weight"
+note when they hit the top of the rep range on every set. The **Workouts** section shows recent
+sessions, workouts in the last 4 weeks against the plan, and strength gains per lift. (Needs the
+database update again: run `supabase/schema.sql` the same way.)
+
 **Replies:** tap **Reply** under any check-in. Your note shows under that check-in, and
 your latest reply appears at the top of the client's tracker. Only you can write replies.
 

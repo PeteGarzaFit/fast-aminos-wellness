@@ -10,6 +10,7 @@
 --   * Only trainers can write workout plans and check-in feedback; each client
 --     can read their own.
 --   * Plan templates are trainer-only; clients never see them.
+--   * Workout logs: a client can log, read and delete their own; trainers see all.
 --   * Signed-out visitors (anon) can't read or write anything.
 
 create extension if not exists pgcrypto;
@@ -80,6 +81,21 @@ create table if not exists public.plan_templates (
   updated_at timestamptz not null default now()
 );
 create unique index if not exists plan_templates_name_key on public.plan_templates (lower(name));
+
+-- Logged workouts (added October 2026). entries is a list of
+-- {name, ref, target, timed, done, sets: [{lb, reps}]}.
+create table if not exists public.workout_logs (
+  id         uuid primary key default gen_random_uuid(),
+  client_id  uuid not null references public.clients(id) on delete cascade,
+  date       date not null default current_date,
+  day_name   text check (char_length(day_name) <= 120),
+  entries    jsonb not null default '[]'::jsonb check (jsonb_typeof(entries) = 'array' and pg_column_size(entries) < 100000),
+  note       text check (char_length(note) <= 500),
+  entered_by uuid default auth.uid() references auth.users(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+create index if not exists workout_logs_client_date on public.workout_logs (client_id, date desc);
+create index if not exists workout_logs_entered_by on public.workout_logs (entered_by);
 
 -- Older setups put helpers in public; remove them there.
 drop function if exists public.is_trainer() cascade;
@@ -183,6 +199,24 @@ drop trigger if exists plan_templates_stamp on public.plan_templates;
 create trigger plan_templates_stamp before insert or update on public.plan_templates
   for each row execute function private.plan_templates_stamp();
 
+-- Workout logs always record who logged them; the client can't be changed later.
+create or replace function private.workout_logs_guard() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  if tg_op = 'INSERT' then
+    new.entered_by := (select auth.uid());
+    new.created_at := now();
+  else
+    new.entered_by := old.entered_by;
+    new.client_id  := old.client_id;
+    new.created_at := old.created_at;
+  end if;
+  return new;
+end $$;
+drop trigger if exists workout_logs_guard on public.workout_logs;
+create trigger workout_logs_guard before insert or update on public.workout_logs
+  for each row execute function private.workout_logs_guard();
+
 -- Only signed-in users may run the two lookup helpers (policies need them).
 -- Nobody calls the trigger functions directly.
 revoke all on all functions in schema private from public, anon, authenticated;
@@ -193,12 +227,13 @@ grant execute on function private.my_client_ids() to authenticated;
 -- ---------- Data API access ----------
 -- New Supabase projects don't expose new tables automatically, so grant
 -- signed-in users access explicitly. Row level security below decides which rows.
-revoke all on public.trainers, public.clients, public.checkins, public.client_plans, public.plan_templates from anon;
+revoke all on public.trainers, public.clients, public.checkins, public.client_plans, public.plan_templates, public.workout_logs from anon;
 grant select on public.trainers to authenticated;
 grant select, insert, update, delete on public.clients to authenticated;
 grant select, insert, update, delete on public.checkins to authenticated;
 grant select, insert, update, delete on public.client_plans to authenticated;
 grant select, insert, update, delete on public.plan_templates to authenticated;
+grant select, insert, update, delete on public.workout_logs to authenticated;
 
 -- ---------- row level security ----------
 alter table public.trainers enable row level security;
@@ -206,6 +241,7 @@ alter table public.clients  enable row level security;
 alter table public.checkins enable row level security;
 alter table public.client_plans enable row level security;
 alter table public.plan_templates enable row level security;
+alter table public.workout_logs enable row level security;
 
 drop policy if exists "trainers read self" on public.trainers;
 create policy "trainers read self" on public.trainers
@@ -267,6 +303,27 @@ create policy "plans trainer update" on public.client_plans
 drop policy if exists "plans trainer delete" on public.client_plans;
 create policy "plans trainer delete" on public.client_plans
   for delete to authenticated using ((select private.is_trainer()));
+
+drop policy if exists "workouts read" on public.workout_logs;
+create policy "workouts read" on public.workout_logs
+  for select to authenticated
+  using ((select private.is_trainer()) or client_id in (select private.my_client_ids()));
+
+drop policy if exists "workouts insert" on public.workout_logs;
+create policy "workouts insert" on public.workout_logs
+  for insert to authenticated
+  with check ((select private.is_trainer()) or client_id in (select private.my_client_ids()));
+
+drop policy if exists "workouts update" on public.workout_logs;
+create policy "workouts update" on public.workout_logs
+  for update to authenticated
+  using ((select private.is_trainer()) or client_id in (select private.my_client_ids()))
+  with check ((select private.is_trainer()) or client_id in (select private.my_client_ids()));
+
+drop policy if exists "workouts delete" on public.workout_logs;
+create policy "workouts delete" on public.workout_logs
+  for delete to authenticated
+  using ((select private.is_trainer()) or client_id in (select private.my_client_ids()));
 
 drop policy if exists "templates trainer only" on public.plan_templates;
 create policy "templates trainer only" on public.plan_templates

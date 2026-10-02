@@ -1,10 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" role="img" aria-labelledby="title desc">
 <title id="title">FAST AMINOS WELLNESS</title>
 <desc id="desc">FAST AMINOS WELLNESS wordmark</desc>
-<rect width="1200" height="400" fill="none"/>
+<rect width="1200" height="300" fill="none"/>
 <g font-family="Arial Black,Arial,sans-serif" font-weight="900" font-style="italic">
-<text x="20" y="175" font-size="190" letter-spacing="-10" fill="#000">FAST</text>
-<text x="395" y="175" font-size="190" letter-spacing="-10" fill="#1769E8">AMINOS</text>
+<text x="20" y="142" font-size="155" letter-spacing="-8" fill="#000">FAST</text>
+<text x="345" y="142" font-size="155" letter-spacing="-8" fill="#1769E8">AMINOS</text>
 </g>
-<text x="800" y="285" text-anchor="middle" font-family="Arial Black,Arial,sans-serif" font-size="82" font-weight="900" letter-spacing="10" fill="#000">WELLNESS</text>
+<text x="785" y="238" text-anchor="middle" font-family="Arial Black,Arial,sans-serif" font-size="68" font-weight="900" letter-spacing="8" fill="#000">WELLNESS</text>
 </svg>

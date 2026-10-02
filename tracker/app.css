@@ -4,7 +4,7 @@
   --blue:#1769E8; --blue-dk:#1257C6; --blue-soft:#E8F0FD;
   --ink:#111827; --ink-2:#475467; --muted:#667085; --faint:#98A2B3;
   --line:#E7EAF0; --grid:#EEF1F5; --soft:#F6F8FC; --white:#FFFFFF;
-  --good:#12805C; --good-soft:#E3F4EC; --warn:#935F00; --warn-soft:#FDF1D6; --bad:#C0342B;
+  --good:#1769E8; --good-soft:#E8F0FD; --warn:#935F00; --warn-soft:#FDF1D6; --bad:#C0342B;
   --serif:Georgia,"Times New Roman",serif;
   --sans:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
@@ -277,3 +277,21 @@ tr.crow .coach{position:sticky;left:0;max-width:min(640px,calc(100vw - 72px))}
 .rtimer.done .rt-time{animation:rtpulse 1s ease-in-out 3}
 @keyframes rtpulse{50%{opacity:.35}}
 @media (max-width:400px){.rt-time{font-size:28px}.rt-b button{padding:9px 9px;min-width:44px;font-size:14px}.rt-row{padding:10px 14px 12px}}
+
+/* how-you-feel questions */
+.chk{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:650;flex-wrap:wrap}.chk input{width:18px;height:18px}
+.feel{border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:0;display:flex;flex-direction:column;gap:12px;min-width:0}
+.feel legend{font-weight:750;font-size:14px;padding:0 6px}
+.scale{display:grid;grid-template-columns:110px minmax(0,1fr);gap:4px 10px;align-items:center}
+.slbl{font-size:13px;font-weight:700;color:var(--ink-2)}
+.dots{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.dots button{border:1px solid #D7DFEA;background:var(--white);border-radius:10px;padding:9px 0;font-weight:750;font-size:15px;cursor:pointer;color:var(--ink-2)}
+.dots button[aria-checked=true]{background:var(--blue);border-color:var(--blue);color:#fff}
+.sends{grid-column:2;display:flex;justify-content:space-between;font-size:11px;color:var(--faint)}
+.glp{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--grid);padding-top:10px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid #D7DFEA;background:var(--white);border-radius:999px;padding:7px 12px;font-size:13.5px;font-weight:650;cursor:pointer;color:var(--ink-2)}
+.chip[aria-pressed=true]{background:var(--blue-soft);border-color:var(--blue);color:var(--blue)}
+.feel .hint{font-size:11.5px;color:var(--muted)}
+td .feelline{display:block;font-size:12px;color:var(--ink-2);margin-top:2px;white-space:normal;max-width:300px}
+@media (max-width:480px){.scale{grid-template-columns:minmax(0,1fr)}.sends{grid-column:1}}

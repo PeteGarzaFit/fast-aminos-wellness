@@ -92,6 +92,12 @@ note when they hit the top of the rep range on every set. The **Workouts** secti
 sessions, workouts in the last 4 weeks against the plan, and strength gains per lift. (Needs the
 database update again: run `supabase/schema.sql` the same way.)
 
+**Check-in questions:** every check-in asks for energy, hunger and sleep quality (1–5), plus
+average sleep hours and daily steps from the Health app. Tick **On a GLP-1 medication** when you
+add or edit a client to add side-effect questions to their check-ins. Low energy and side effects
+are flagged in the check-in log, and Energy, Sleep and Steps get their own chart tabs. (Needs the
+database update again: run `supabase/schema.sql` the same way.)
+
 **Replies:** tap **Reply** under any check-in. Your note shows under that check-in, and
 your latest reply appears at the top of the client's tracker. Only you can write replies.
 

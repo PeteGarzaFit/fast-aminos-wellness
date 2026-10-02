@@ -59,6 +59,15 @@ create index if not exists checkins_entered_by on public.checkins (entered_by);
 alter table public.checkins add column if not exists coach_note text check (char_length(coach_note) <= 1000);
 alter table public.checkins add column if not exists coach_note_at timestamptz;
 
+-- How the client is feeling (added October 2026). 1–5 scales, optional.
+alter table public.checkins add column if not exists energy smallint check (energy between 1 and 5);
+alter table public.checkins add column if not exists hunger smallint check (hunger between 1 and 5);
+alter table public.checkins add column if not exists sleep_q smallint check (sleep_q between 1 and 5);
+alter table public.checkins add column if not exists sleep_hours numeric(3,1) check (sleep_hours between 0 and 16);
+alter table public.checkins add column if not exists steps integer check (steps between 0 and 100000);
+alter table public.checkins add column if not exists side_effects text[] check (cardinality(side_effects) <= 12);
+alter table public.clients add column if not exists on_glp1 boolean not null default false;
+
 -- One workout plan per client (added October 2026).
 -- days is a list of {name, items: [{name, sets, reps, rest, note, ref}]}.
 create table if not exists public.client_plans (

@@ -64,6 +64,8 @@ function series(c, entries) {
       if (p.e.neck && r.e.neck && Math.abs(r.e.neck - p.e.neck) >= 0.75) r.flags.push(`Neck changed ${sgn(r.e.neck - p.e.neck)} in. Neck rarely moves this much; check tape placement.`);
       if (p.e.weight && r.e.weight && dd <= 21 && Math.abs(r.e.weight - p.e.weight) / p.e.weight / (dd / 7) > 0.02) r.flags.push(`Weight changed ${sgn(r.e.weight - p.e.weight)} lb in ${dd} days. Check timing, meals and water.`);
     }
+    if (r.e.energy != null && r.e.energy <= 2) r.flags.push(`Low energy (${r.e.energy}/5). Check calories, protein and sleep.`);
+    if (r.e.sideEffects && r.e.sideEffects.length) r.flags.push(`GLP-1 side effects: ${r.e.sideEffects.join(", ").toLowerCase()}.`);
     if (r.e.omron != null && r.tape != null && Math.abs(r.e.omron - r.tape) > 6) r.flags.push(`Omron and tape differ by ${f1(Math.abs(r.e.omron - r.tape))} pts. Check hydration and tape spots.`);
   });
   return { rows, cal };
@@ -103,15 +105,20 @@ function summaryText(c, s, forClient) {
 
 /* ---------- data backends ---------- */
 const BUCKET = "progress-photos";
-const fromClientRow = r => ({ id: r.id, userId: r.user_id, email: r.email, name: r.name, sex: r.sex, dob: r.dob, height: num(r.height_in), goal: r.goal });
-const toClientRow = c => ({ email: c.email, name: c.name, sex: c.sex, dob: c.dob || null, height_in: c.height, goal: c.goal || null });
-const fromCheckinRow = r => ({ id: r.id, clientId: r.client_id, date: r.date, weight: num(r.weight_lb), waist: num(r.waist_in), neck: num(r.neck_in), hip: num(r.hip_in), omron: num(r.omron_bf), photoFront: r.photo_front, photoSide: r.photo_side, note: r.note, coachNote: r.coach_note || null, coachNoteAt: r.coach_note_at || null, enteredBy: r.entered_by, createdAt: r.created_at });
+const fromClientRow = r => ({ id: r.id, userId: r.user_id, email: r.email, name: r.name, sex: r.sex, dob: r.dob, height: num(r.height_in), goal: r.goal, glp1: !!r.on_glp1 });
+const toClientRow = c => ({ email: c.email, name: c.name, sex: c.sex, dob: c.dob || null, height_in: c.height, goal: c.goal || null, on_glp1: !!c.glp1 });
+const FEEL_KEYS = ["energy", "hunger", "sleep_q", "sleep_hours", "steps", "side_effects"];
+const SIDE_EFFECTS = ["Nausea", "Vomiting", "Constipation", "Diarrhea", "Heartburn", "Bloating", "Tired", "Headache", "Dizzy", "Low appetite"];
+const fromCheckinRow = r => ({ id: r.id, clientId: r.client_id, date: r.date, weight: num(r.weight_lb), waist: num(r.waist_in), neck: num(r.neck_in), hip: num(r.hip_in), omron: num(r.omron_bf), photoFront: r.photo_front, photoSide: r.photo_side, note: r.note, energy: num(r.energy), hunger: num(r.hunger), sleepQ: num(r.sleep_q), sleepH: num(r.sleep_hours), steps: num(r.steps), sideEffects: Array.isArray(r.side_effects) ? r.side_effects : [], coachNote: r.coach_note || null, coachNoteAt: r.coach_note_at || null, enteredBy: r.entered_by, createdAt: r.created_at });
 const fromWorkoutRow = r => ({ id: r.id, clientId: r.client_id, date: r.date, dayName: r.day_name || "", entries: Array.isArray(r.entries) ? r.entries : [], note: r.note || "", enteredBy: r.entered_by, createdAt: r.created_at });
 const fromTplRow = r => ({ id: r.id, name: r.name, title: r.title || "", notes: r.notes || "", days: Array.isArray(r.days) ? r.days : [] });
 const fromPlanRow = r => r ? ({ title: r.title || "", notes: r.notes || "", days: Array.isArray(r.days) ? r.days : [], updatedAt: r.updated_at }) : null;
 /* Supabase reports a missing table/column when the October 2026 database update hasn't been run yet. */
 const isMissing = e => !!e && (e.code === "42P01" || e.code === "42703" || e.code === "PGRST205" || e.code === "PGRST204" || /does not exist|schema cache/i.test(e.message || ""));
-const toCheckinRow = e => ({ client_id: e.clientId, date: e.date, weight_lb: e.weight, waist_in: e.waist, neck_in: e.neck, hip_in: e.hip, omron_bf: e.omron, photo_front: e.photoFront, photo_side: e.photoSide, note: e.note });
+const toCheckinRow = e => ({ client_id: e.clientId, date: e.date, weight_lb: e.weight, waist_in: e.waist, neck_in: e.neck, hip_in: e.hip, omron_bf: e.omron, photo_front: e.photoFront, photo_side: e.photoSide, note: e.note,
+  energy: e.energy ?? null, hunger: e.hunger ?? null, sleep_q: e.sleepQ ?? null, sleep_hours: e.sleepH ?? null, steps: e.steps ?? null, side_effects: e.sideEffects && e.sideEffects.length ? e.sideEffects : null });
+/* Before the October 2026 database update the new columns don't exist yet; save without them. */
+const withoutFeel = row => { const r = { ...row }; FEEL_KEYS.forEach(k => delete r[k]); delete r.on_glp1; return r; };
 
 function supaApi(sb) {
   const chk = ({ data, error }) => { if (error) throw error; return data; };
@@ -120,16 +127,21 @@ function supaApi(sb) {
     async listClients() { return chk(await sb.from("clients").select("*").order("name")).map(fromClientRow); },
     async listCheckins(clientId) { return chk(await sb.from("checkins").select("*").eq("client_id", clientId).order("date").order("created_at")).map(fromCheckinRow); },
     async saveClient(c, id) {
-      const row = toClientRow(c);
-      const d = id ? chk(await sb.from("clients").update(row).eq("id", id).select().single()) : chk(await sb.from("clients").insert(row).select().single());
-      return fromClientRow(d);
+      const save = row => id ? sb.from("clients").update(row).eq("id", id).select().single() : sb.from("clients").insert(row).select().single();
+      let res = await save(toClientRow(c));
+      if (res.error && isMissing(res.error)) { res = await save(withoutFeel(toClientRow(c))); if (!res.error) toast("Saved. Run the database update in tracker/SETUP.md to keep the GLP-1 setting."); }
+      return fromClientRow(chk(res));
     },
     async deleteClient(id) {
       const files = chk(await sb.storage.from(BUCKET).list(id, { limit: 1000 })) || [];
       if (files.length) await sb.storage.from(BUCKET).remove(files.map(f => id + "/" + f.name));
       chk(await sb.from("clients").delete().eq("id", id));
     },
-    async addCheckin(e) { return fromCheckinRow(chk(await sb.from("checkins").insert(toCheckinRow(e)).select().single())); },
+    async addCheckin(e) {
+      let res = await sb.from("checkins").insert(toCheckinRow(e)).select().single();
+      if (res.error && isMissing(res.error)) { res = await sb.from("checkins").insert(withoutFeel(toCheckinRow(e))).select().single(); if (!res.error) toast("Check-in saved. The how-you-feel answers need the latest database update."); }
+      return fromCheckinRow(chk(res));
+    },
     async deleteCheckin(e) {
       chk(await sb.from("checkins").delete().eq("id", e.id));
       const p = [e.photoFront, e.photoSide].filter(Boolean);
@@ -163,13 +175,14 @@ function supaApi(sb) {
 
 function demoApi(asClient) {
   const clients = [
-    { id: "c1", userId: asClient ? "me" : "u1", email: "sample.client@example.com", name: "Sample Client", sex: "female", dob: "1990-04-12", height: 65, goal: "Lose fat, keep lean mass" },
+    { id: "c1", userId: asClient ? "me" : "u1", email: "sample.client@example.com", name: "Sample Client", sex: "female", dob: "1990-04-12", height: 65, goal: "Lose fat, keep lean mass", glp1: true },
     { id: "c2", userId: null, email: "sample.two@example.com", name: "Sample Client Two", sex: "male", dob: "1984-11-02", height: 70, goal: "Recomp for summer" }
   ];
   const raw = [["c1","2026-06-08",162.4,31.5,13.5,39.8,30.1],["c1","2026-06-22",161.0,31.2,13.5,39.6],["c1","2026-07-06",159.8,30.9,13.4,39.4],["c1","2026-07-20",158.6,30.6,13.4,39.3,28.9],["c1","2026-08-03",157.9,30.4,13.4,39.1],["c1","2026-08-17",156.8,30.1,13.3,38.9],["c1","2026-08-31",156.2,29.9,13.3,38.8,27.4],["c1","2026-09-14",155.5,29.7,13.3,38.6],["c1","2026-09-28",155.1,29.3,13.3,38.5],
                ["c2","2026-07-15",212.6,40.5,16.2,null,26.8],["c2","2026-07-29",210.9,40.1,16.2,null],["c2","2026-08-05",210.2,38.8,16.1,null],["c2","2026-08-19",208.4,39.6,16.2,null]];
   const fb = { 7: "Waist keeps trending down and lean mass is holding. Exactly what we want. Keep protein up and stay consistent with the 45/30.", 8: "Another solid week! You're down 2.2 inches on the waist since June. Let's add 5 lb to your hip thrusts this week." };
-  let entries = raw.map((r, i) => ({ id: "e" + i, clientId: r[0], date: r[1], weight: r[2], waist: r[3], neck: r[4], hip: r[5], omron: r[6] ?? null, note: i === 0 ? "Baseline at the gym" : null, coachNote: fb[i] || null, coachNoteAt: fb[i] ? r[1] + "T18:00:00Z" : null, enteredBy: (r[6] != null || !asClient) ? "trainer" : "me", createdAt: String(i).padStart(4, "0") }));
+  const feel = [[3, 4, 3, 6.4, 5200, ["Nausea", "Low appetite"]], [3, 3, 3, 6.6, 6100, ["Nausea"]], [4, 3, 3, 6.9, 7000, []], [4, 2, 4, 7.0, 7400, ["Constipation"]], [4, 3, 4, 7.2, 8100, []], [3, 3, 3, 6.5, 7600, []], [4, 2, 4, 7.3, 8800, []], [5, 2, 4, 7.4, 9300, []], [5, 2, 5, 7.6, 9800, []]];
+  let entries = raw.map((r, i) => ({ id: "e" + i, ...(r[0] === "c1" && feel[i] ? { energy: feel[i][0], hunger: feel[i][1], sleepQ: feel[i][2], sleepH: feel[i][3], steps: feel[i][4], sideEffects: feel[i][5] } : { sideEffects: [] }), clientId: r[0], date: r[1], weight: r[2], waist: r[3], neck: r[4], hip: r[5], omron: r[6] ?? null, note: i === 0 ? "Baseline at the gym" : null, coachNote: fb[i] || null, coachNoteAt: fb[i] ? r[1] + "T18:00:00Z" : null, enteredBy: (r[6] != null || !asClient) ? "trainer" : "me", createdAt: String(i).padStart(4, "0") }));
   const L = window.WORKOUT_LIBRARY || [], li = id => (L.find(w => w.id === id) || { items: [], ref: "" });
   const fromLib = (id, n) => li(id).items.slice(0, n || 99).map(x => ({ ...x, note: "", ref: li(id).ref }));
   const plans = { c1: { title: "Phase 1: Build the base", notes: "3 strength days a week, then 30 minutes of Zone 2 right after each one. Rest at least one day between sessions.", days: [
@@ -425,12 +438,12 @@ function tiles(c, s) {
   </div>`;
 }
 
-const METRICS = { bf: { label: "Body fat", unit: "%", get: r => r.bf, span: 4 }, weight: { label: "Weight", unit: "lb", get: r => r.e.weight, span: 6 }, lean: { label: "Lean mass", unit: "lb", get: r => r.lean, span: 4 }, fat: { label: "Fat mass", unit: "lb", get: r => r.fat, span: 4 }, waist: { label: "Waist", unit: "in", get: r => r.e.waist, span: 2 } };
+const METRICS = { bf: { label: "Body fat", unit: "%", get: r => r.bf, span: 4 }, weight: { label: "Weight", unit: "lb", get: r => r.e.weight, span: 6 }, lean: { label: "Lean mass", unit: "lb", get: r => r.lean, span: 4 }, fat: { label: "Fat mass", unit: "lb", get: r => r.fat, span: 4 }, waist: { label: "Waist", unit: "in", get: r => r.e.waist, span: 2 }, energy: { label: "Energy", unit: "/5", get: r => r.e.energy, span: 4, opt: true }, sleep: { label: "Sleep", unit: "h", get: r => r.e.sleepH, span: 2, opt: true }, steps: { label: "Steps", unit: "", get: r => r.e.steps, span: 2000, opt: true } };
 function chartCard(s) {
   if (!s.rows.length) return "";
   const m = METRICS[S.metric];
   return `<section class="card"><div class="card-h"><h2>${m.label} over time</h2>
-    <div class="seg" role="group" aria-label="Metric">${Object.entries(METRICS).map(([k, v]) => `<button type="button" data-metric="${k}" aria-pressed="${k === S.metric}">${v.label}</button>`).join("")}</div></div>
+    <div class="seg" role="group" aria-label="Metric">${Object.entries(METRICS).filter(([, v]) => !v.opt || s.rows.some(r => v.get(r) != null)).map(([k, v]) => `<button type="button" data-metric="${k}" aria-pressed="${k === S.metric}">${v.label}</button>`).join("")}</div></div>
     <div class="chart" id="chart"></div>
     <div class="legend"><span><svg width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="4" fill="#fff" stroke="#1769E8" stroke-width="2"/></svg>Home check-in (tape)</span><span><svg width="14" height="14" aria-hidden="true"><rect x="3" y="3" width="8" height="8" transform="rotate(45 7 7)" fill="#1769E8"/></svg>Gym day (Omron)</span></div>
   </section>`;
@@ -482,7 +495,7 @@ function logCard(c, s) {
   if (!s.rows.length) return `<section class="card"><div class="card-h"><h2>Check-in log</h2></div><div class="empty">Check-ins will list here, newest first.</div></section>`;
   const fem = c.sex !== "male";
   const tr = [...s.rows].reverse().map(r => { const e = r.e;
-    return `<tr><td>${fmtD(e.date, true)}${e.omron != null ? ` <span class="tag">GYM</span>` : ""}${r.flags.map(f => `<span class="flag">${ICON_WARN}<span>${esc(f)}</span></span>`).join("")}${e.note ? `<span class="note">${esc(e.note)}</span>` : ""}${S.isTrainer && !S.planMissing && !e.coachNote ? `<button type="button" class="linkbtn reply" data-reply="${esc(e.id)}">Reply</button>` : ""}</td>
+    return `<tr><td>${fmtD(e.date, true)}${e.omron != null ? ` <span class="tag">GYM</span>` : ""}${r.flags.map(f => `<span class="flag">${ICON_WARN}<span>${esc(f)}</span></span>`).join("")}${e.note ? `<span class="note">${esc(e.note)}</span>` : ""}${feelLine(e)}${S.isTrainer && !S.planMissing && !e.coachNote ? `<button type="button" class="linkbtn reply" data-reply="${esc(e.id)}">Reply</button>` : ""}</td>
     <td>${f1(e.weight)}</td><td>${f1(e.waist)}</td><td>${f1(e.neck)}</td>${fem ? `<td>${f1(e.hip)}</td>` : ""}
     <td>${f1(r.tape)}</td><td>${e.omron != null ? f1(e.omron) : "–"}</td><td class="bfcell">${f1(r.bf)}</td><td>${f1(r.lean)}</td>
     <td>${canDelete(e) ? `<button type="button" class="btn ghost sm danger" data-del="${esc(e.id)}">Delete</button>` : ""}</td></tr>${e.coachNote ? `<tr class="crow"><td colspan="${fem ? 10 : 9}"><div class="coach"><b>${esc(TRAINER)}:</b> ${esc(e.coachNote)}${S.isTrainer && !S.planMissing ? ` <button type="button" class="linkbtn reply" data-reply="${esc(e.id)}">Edit</button>` : ""}</div></td></tr>` : ""}`; }).join("");
@@ -584,7 +597,7 @@ function openClient(c) {
   $("#cTitle").textContent = c ? "Edit client" : "New client";
   $("#c-name").value = c?.name || ""; $("#c-email").value = c?.email || ""; $("#c-sex").value = c?.sex || "female"; $("#c-dob").value = c?.dob || "";
   $("#c-ft").value = c?.height ? Math.floor(c.height / 12) : ""; $("#c-in").value = c?.height ? Math.round((c.height % 12) * 2) / 2 : "";
-  $("#c-goal").value = c?.goal || ""; $("#cErr").textContent = "";
+  $("#c-goal").value = c?.goal || ""; $("#c-glp1").checked = !!c?.glp1; $("#cErr").textContent = "";
   const del = $("#cDelete"); del.hidden = !c; del.classList.remove("armed"); del.textContent = "Delete client"; del.disabled = false;
   $("#dlgClient").showModal();
 }
@@ -603,7 +616,7 @@ $("#fClient").onsubmit = async ev => {
   if (!name) { err.textContent = "Add the client's name."; return; }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = "Add the email the client will sign in with."; return; }
   if (ft == null || ft < 3 || ft > 7 || inch < 0 || inch >= 12) { err.textContent = "Height is needed for the tape formula. Enter feet and inches."; return; }
-  const d = { name, email, sex: $("#c-sex").value, dob: $("#c-dob").value || null, height: ft * 12 + inch, goal: $("#c-goal").value.trim() || null };
+  const d = { name, email, sex: $("#c-sex").value, dob: $("#c-dob").value || null, height: ft * 12 + inch, goal: $("#c-goal").value.trim() || null, glp1: $("#c-glp1").checked };
   const btn = $("#cSave"); btn.disabled = true; err.textContent = "";
   try {
     const saved = await api.saveClient(d, editing?.id);
@@ -627,7 +640,7 @@ function openEntry(c) {
   $("#eTip").textContent = S.isTrainer ? "Measure at the same time of day as the last check-in, before eating or training. Tape snug, not tight." : "Weigh and measure first thing in the morning, before eating or training. Tape snug, not tight, in the same spots each time.";
   const ph = (id, v) => { $(id).placeholder = v ? "Last: " + f1(v) : ""; };
   ph("#e-weight", last?.e.weight); ph("#e-waist", last?.e.waist); ph("#e-neck", last?.e.neck); ph("#e-hip", last?.e.hip);
-  livePreview(); $("#dlgEntry").showModal();
+  resetFeel(c); livePreview(); $("#dlgEntry").showModal();
 }
 function livePreview() {
   const c = entryClient; if (!c) return;
@@ -658,7 +671,9 @@ async function compress(file) {
 $("#fEntry").onsubmit = async ev => {
   ev.preventDefault();
   const c = entryClient, err = $("#eErr");
-  const d = { clientId: c.id, date: $("#e-date").value || todayISO(), weight: num($("#e-weight").value), waist: num($("#e-waist").value), neck: num($("#e-neck").value), hip: c.sex === "male" ? null : num($("#e-hip").value), omron: S.isTrainer ? num($("#e-omron").value) : null, note: $("#e-note").value.trim() || null, photoFront: null, photoSide: null };
+  const d = { clientId: c.id, date: $("#e-date").value || todayISO(), weight: num($("#e-weight").value), waist: num($("#e-waist").value), neck: num($("#e-neck").value), hip: c.sex === "male" ? null : num($("#e-hip").value), omron: S.isTrainer ? num($("#e-omron").value) : null, note: $("#e-note").value.trim() || null, photoFront: null, photoSide: null, ...readFeel(c) };
+  if (d.sleepH != null && (d.sleepH < 0 || d.sleepH > 16)) { err.textContent = "Average sleep should be between 0 and 16 hours."; return; }
+  if (d.steps != null && (d.steps < 0 || d.steps > 100000)) { err.textContent = "Average steps should be between 0 and 100,000."; return; }
   if (d.date > todayISO()) { err.textContent = "The date can't be in the future."; return; }
   if (d.weight == null || d.weight < 50 || d.weight > 700) { err.textContent = "Add today's weight in pounds."; return; }
   const needTape = d.omron == null;
@@ -680,6 +695,39 @@ $("#fEntry").onsubmit = async ev => {
   }
   btn.disabled = false; btn.textContent = "Save check-in";
 };
+
+/* ---------- how-you-feel check-in questions ---------- */
+const feel = { energy: null, hunger: null, sleep_q: null, se: new Set() };
+function drawScales() {
+  $$("#feelBox .scale").forEach(sc => {
+    const k = sc.dataset.scale;
+    sc.querySelector(".dots").innerHTML = [1, 2, 3, 4, 5].map(n => `<button type="button" role="radio" aria-checked="${feel[k] === n}" data-k="${k}" data-n="${n}">${n}</button>`).join("");
+  });
+  $("#seChips").innerHTML = [...SIDE_EFFECTS, "None"].map(x => `<button type="button" class="chip" aria-pressed="${x === "None" ? feel.se.size === 0 && feel.seNone === true : feel.se.has(x)}" data-se="${esc(x)}">${esc(x)}</button>`).join("");
+}
+function resetFeel(c) {
+  feel.energy = feel.hunger = feel.sleep_q = null; feel.se = new Set(); feel.seNone = false;
+  $("#e-sleeph").value = ""; $("#e-steps").value = "";
+  $("#glpBox").hidden = !c.glp1; drawScales();
+}
+$("#feelBox").addEventListener("click", ev => {
+  const b = ev.target.closest("button"); if (!b) return;
+  if (b.dataset.k) { const n = +b.dataset.n; feel[b.dataset.k] = feel[b.dataset.k] === n ? null : n; }
+  else if (b.dataset.se) { const x = b.dataset.se; if (x === "None") { feel.se.clear(); feel.seNone = !feel.seNone; } else { feel.seNone = false; feel.se.has(x) ? feel.se.delete(x) : feel.se.add(x); } }
+  drawScales();
+});
+function readFeel(c) {
+  return { energy: feel.energy, hunger: feel.hunger, sleepQ: feel.sleep_q, sleepH: num($("#e-sleeph").value), steps: num($("#e-steps").value) != null ? Math.round(num($("#e-steps").value)) : null, sideEffects: c.glp1 ? [...feel.se] : [] };
+}
+function feelLine(e) {
+  const bits = [];
+  if (e.energy != null) bits.push(`Energy ${e.energy}/5`);
+  if (e.hunger != null) bits.push(`Hunger ${e.hunger}/5`);
+  if (e.sleepQ != null) bits.push(`Sleep ${e.sleepQ}/5`);
+  if (e.sleepH != null) bits.push(`${f1(e.sleepH)} h`);
+  if (e.steps != null) bits.push(`${Math.round(e.steps).toLocaleString("en-US")} steps`);
+  return bits.length ? `<span class="feelline">${bits.join(" · ")}</span>` : "";
+}
 
 /* ---------- coach feedback + workout plans ---------- */
 async function loadPlan() {

@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Zone 2 Heart Rate Calculator | FAST AMINOS WELLNESS</title>
+<meta name="description" content="Free Zone 2 heart rate calculator. Enter your age to find your Zone 2 range for fat-burning, low-intensity steady-state (LISS) cardio.">
+<meta name="theme-color" content="#1769E8">
+<link rel="icon" href="../tracker/icons/icon.svg" type="image/svg+xml">
+<style>
+:root{--blue:#1769E8;--blue-dk:#1257C6;--blue-soft:#E8F0FD;--ink:#111827;--ink-2:#475467;--muted:#667085;--faint:#98A2B3;--line:#E7EAF0;--grid:#EEF1F5;--soft:#F6F8FC;--white:#fff;
+  --z1:#94A3B8;--z2:#1769E8;--z3:#0EA5A4;--z4:#E8A317;--z5:#D9483B;
+  --serif:Georgia,"Times New Roman",serif;--sans:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color-scheme:light}
+*{box-sizing:border-box}html,body{margin:0}
+body{font-family:var(--sans);color:var(--ink);background:var(--soft);line-height:1.5;font-size:15px;-webkit-text-size-adjust:100%}
+a{color:var(--blue)}:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+button,input{font:inherit;color:inherit}
+.wrap{max-width:1120px;margin:0 auto;padding-inline:16px}
+.bar{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.95);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+.bar-in{display:flex;align-items:center;gap:12px;min-height:64px}
+.brand img{width:190px;height:auto;display:block}
+.bar-links{margin-left:auto;display:flex;gap:16px;align-items:center;font-size:14px;font-weight:650}
+.bar-links a{color:var(--ink);text-decoration:none}.bar-links a:hover{color:var(--blue)}
+@media (max-width:520px){.brand img{width:140px}.bar-links .hide-sm{display:none}}
+.hero{padding-block:30px 8px;max-width:760px}
+.kicker{font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:850;color:var(--blue)}
+h1{font-family:var(--serif);font-weight:500;font-size:clamp(34px,5vw,54px);line-height:1.02;letter-spacing:-.04em;margin:8px 0 10px;text-wrap:balance}
+.hero p{color:var(--muted);font-size:16px;margin:0;max-width:62ch}
+.layout{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);gap:18px;align-items:start;padding-block:20px 18px}
+@media (max-width:900px){.layout{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--white);border:1px solid var(--line);border-radius:18px;padding:20px;min-width:0}
+.card h2{font-family:var(--serif);font-weight:500;font-size:24px;letter-spacing:-.02em;margin:0 0 14px}
+.field{display:flex;flex-direction:column;gap:4px;margin-bottom:14px}
+.field label{font-size:12.5px;font-weight:650;color:var(--ink-2)}
+.hint{font-size:11.5px;color:var(--faint)}
+input[type=number]{width:100%;background:var(--white);border:1px solid #D7DFEA;border-radius:10px;padding:10px 11px;font-size:16px;min-width:0}
+input:focus{border-color:var(--blue);outline:none}
+details{border-top:1px solid var(--grid);padding-top:12px}
+summary{cursor:pointer;font-size:13.5px;font-weight:700;color:var(--blue)}
+details .field{margin-top:12px}
+.empty{color:var(--muted);font-size:14.5px;padding:24px;border:1px dashed #D7DFEA;border-radius:14px;text-align:center}
+.res-lbl{font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:800;color:var(--muted)}
+.big{font-weight:850;font-size:clamp(44px,8vw,60px);line-height:1;letter-spacing:-.03em;color:var(--z2);font-variant-numeric:tabular-nums;margin-top:6px}
+.big small{font-size:18px;color:var(--muted);font-weight:650;letter-spacing:0;margin-left:6px}
+.target{margin-top:8px;font-size:15px;color:var(--ink-2)}.target b{color:var(--ink)}
+.zones{margin-top:18px;display:flex;flex-direction:column;gap:6px}
+.zone{display:grid;grid-template-columns:118px minmax(0,1fr) 78px;align-items:center;gap:10px;font-size:13.5px}
+.zone .zn{font-weight:750;color:var(--ink-2);line-height:1.2}.zone .zn small{display:block;font-size:11.5px;font-weight:600;color:var(--faint)}
+.zone .zb{height:22px;border-radius:7px}
+.zone .zr{text-align:right;font-variant-numeric:tabular-nums;color:var(--ink-2)}
+.zone.cur .zn,.zone.cur .zr,.zone.cur .zn small{color:var(--z2);font-weight:800}
+.zone.cur .zb{box-shadow:0 0 0 2px var(--white),0 0 0 4px var(--z2)}
+.method{font-size:12.5px;color:var(--muted);margin-top:14px}
+.info{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:4px}
+@media (max-width:760px){.info{grid-template-columns:minmax(0,1fr)}}
+.info div{background:var(--white);border:1px solid var(--line);border-radius:16px;padding:16px}
+.info h3{margin:0 0 4px;font-size:15px}.info p{margin:0;font-size:13.5px;color:var(--muted)}
+.cta{background:var(--ink);color:#fff;border-radius:18px;padding:22px;margin-block:18px 48px;display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between}
+.cta h3{font-family:var(--serif);font-weight:500;font-size:24px;letter-spacing:-.02em;margin:0 0 4px}
+.cta p{color:#C8CFDA;margin:0;font-size:14.5px;max-width:560px}
+.btns{display:flex;gap:10px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;border-radius:12px;padding:11px 18px;font-weight:750;font-size:14.5px;text-decoration:none}
+.btn.light{background:#fff;color:var(--ink)}.btn.ghost{border:1px solid rgba(255,255,255,.35);color:#fff}
+footer{border-top:1px solid var(--line);background:var(--white);padding-block:20px 28px;font-size:12px;color:var(--muted)}
+footer p{margin:0;max-width:900px}
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="wrap bar-in">
+    <a class="brand" href="../" aria-label="FAST AMINOS WELLNESS home"><img src="../fast-aminos-wellness-logo.png" alt="FAST AMINOS WELLNESS"></a>
+    <nav class="bar-links"><a class="hide-sm" href="../">Home</a><a class="hide-sm" href="../workouts/">Workouts</a><a href="../calculator/">Calculator</a><a href="../tracker/">Login</a></nav>
+  </div>
+</header>
+
+<main class="wrap">
+<section class="hero">
+  <div class="kicker">Free tool</div>
+  <h1>Find your Zone 2 heart rate</h1>
+  <p>Zone 2 is the easy, steady pace where your body burns the most fat for fuel. Most people walk too slow or push too hard to stay in it. Enter your age to get your number.</p>
+</section>
+
+<div class="layout">
+  <section class="card" aria-label="Your details">
+    <h2>Your details</h2>
+    <div class="field">
+      <label for="age">Age</label>
+      <input id="age" type="number" inputmode="numeric" min="13" max="90" placeholder="e.g. 40">
+    </div>
+    <details id="adv">
+      <summary>Know your real max heart rate?</summary>
+      <div class="field">
+        <label for="mhr">Max heart rate (bpm)</label>
+        <input id="mhr" type="number" inputmode="numeric" min="120" max="230" placeholder="e.g. 185">
+        <span class="hint">From a lab test or a recent all-out effort on a heart rate monitor. Leave blank to estimate from age.</span>
+      </div>
+    </details>
+  </section>
+
+  <section class="card" aria-live="polite" id="results">
+    <div class="empty">Enter your age to see your Zone 2 range.</div>
+  </section>
+</div>
+
+<div class="info">
+  <div><h3>The talk test</h3><p>In Zone 2 you can speak in full sentences, but you couldn't sing. If you can only get out a few words, slow down.</p></div>
+  <div><h3>What it looks like</h3><p>A brisk walk, incline treadmill, easy bike or elliptical. Steady effort you could hold for an hour.</p></div>
+  <div><h3>When to do it</h3><p>Right after lifting, for 30 minutes. That's the 45/30 rule: 45 minutes of strength, then 30 minutes of Zone 2.</p></div>
+</div>
+
+<div class="cta">
+  <div><h3>Put your Zone 2 to work</h3><p>Pair it with a strength workout and the right calories and protein for your goal.</p></div>
+  <div class="btns"><a class="btn light" href="../workouts/">Workouts&nbsp;→</a><a class="btn ghost" href="../calculator/">Calorie calculator</a></div>
+</div>
+</main>
+
+<footer><div class="wrap"><p>For general fitness education only, not medical advice. Age-based formulas are estimates and can be off by 10 bpm or more; your breathing and the talk test are the real check. If you take heart rate–lowering medication (like beta blockers), have a heart condition, or are pregnant, ask your healthcare provider for your training zones before using these numbers.</p></div></footer>
+
+<script>
+(function(){
+"use strict";
+const $=s=>document.querySelector(s);
+const num=v=>{const n=parseFloat(v);return isFinite(n)?n:null};
+const ZONES=[
+  {n:1,name:"Recovery",lo:.50,hi:.60,c:"var(--z1)"},
+  {n:2,name:"Fat burn / LISS",lo:.60,hi:.70,c:"var(--z2)"},
+  {n:3,name:"Aerobic",lo:.70,hi:.80,c:"var(--z3)"},
+  {n:4,name:"Threshold",lo:.80,hi:.90,c:"var(--z4)"},
+  {n:5,name:"Max effort",lo:.90,hi:1.0,c:"var(--z5)"}
+];
+/* Exposed for testing. */
+function zone2(age,mhrIn){
+  const mhr=mhrIn!=null?mhrIn:220-age;
+  return {mhr,est:mhrIn==null,lo:Math.round(mhr*.60),hi:Math.round(mhr*.70),mid:Math.round(mhr*.65),
+    zones:ZONES.map(z=>({...z,from:Math.round(mhr*z.lo),to:Math.round(mhr*z.hi)}))};
+}
+window.__zone2=zone2;
+
+function update(){
+  const age=num($("#age").value), m=num($("#mhr").value);
+  const out=$("#results");
+  const mhr=(m!=null&&m>=120&&m<=230)?m:null;
+  const ageOk=age!=null&&age>=13&&age<=90;
+  if(!ageOk&&mhr==null){out.innerHTML='<div class="empty">Enter your age to see your Zone 2 range.</div>';return;}
+  const r=zone2(age,mhr);
+  const span=r.mhr-Math.round(r.mhr*.5);
+  out.innerHTML=`<div class="res-lbl">Your Zone 2</div>
+  <div class="big">${r.lo}–${r.hi}<small>bpm</small></div>
+  <div class="target">Aim for about <b>${r.mid} bpm</b>, the middle of your range.</div>
+  <div class="zones" role="list" aria-label="All heart rate zones">
+  ${r.zones.slice().reverse().map(z=>`<div class="zone${z.n===2?" cur":""}" role="listitem"><span class="zn">Zone ${z.n}<small>${z.name}</small></span><span class="zb" style="background:${z.c};width:${(z.to-Math.round(r.mhr*.5))/span*100}%"></span><span class="zr">${z.from}–${z.to}</span></div>`).join("")}
+  </div>
+  <div class="method">Based on ${r.est?`an estimated max heart rate of <b>${r.mhr} bpm</b> (220 − age)`:`your max heart rate of <b>${r.mhr} bpm</b>`}. Zone 2 = 60–70% of max. If the talk test says you're working harder than this, trust the talk test.</div>`;
+}
+document.addEventListener("input",update);
+const q=new URLSearchParams(location.search);
+if(q.get("age")&&isFinite(+q.get("age")))$("#age").value=q.get("age");
+update();
+})();
+</script>
+</body>
+</html>

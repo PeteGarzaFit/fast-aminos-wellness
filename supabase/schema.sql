@@ -16,6 +16,7 @@
 --   * Paused clients (active = false) only see their own client record, so the
 --     tracker can tell them coaching is paused. Everything else is hidden until
 --     the trainer resumes them.
+--   * Water: each client logs their own; trainers can read it.
 --   * Signed-out visitors (anon) can't read or write anything.
 
 create extension if not exists pgcrypto;
@@ -77,6 +78,18 @@ alter table public.clients add column if not exists on_glp1 boolean not null def
 -- and see that they're paused, but can't open or add anything until the trainer
 -- turns coaching back on. Their history is kept.
 alter table public.clients add column if not exists active boolean not null default true;
+
+-- Daily water (added October 2026). One row per client per day, in ounces.
+-- water_goal_oz is set by the trainer; when empty the tracker uses half the
+-- client's body weight in ounces.
+alter table public.clients add column if not exists water_goal_oz smallint check (water_goal_oz between 16 and 256);
+create table if not exists public.water_daily (
+  client_id  uuid not null references public.clients(id) on delete cascade,
+  date       date not null,
+  oz         smallint not null default 0 check (oz between 0 and 640),
+  updated_at timestamptz not null default now(),
+  primary key (client_id, date)
+);
 
 -- One workout plan per client (added October 2026).
 -- days is a list of {name, items: [{name, sets, reps, rest, note, ref}]}.
@@ -264,6 +277,17 @@ drop trigger if exists health_daily_stamp on public.health_daily;
 create trigger health_daily_stamp before insert or update on public.health_daily
   for each row execute function private.health_daily_stamp();
 
+create or replace function private.water_daily_stamp() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  new.updated_at := now();
+  if tg_op = 'UPDATE' then new.client_id := old.client_id; new.date := old.date; end if;
+  return new;
+end $$;
+drop trigger if exists water_daily_stamp on public.water_daily;
+create trigger water_daily_stamp before insert or update on public.water_daily
+  for each row execute function private.water_daily_stamp();
+
 -- Only signed-in users may run the two lookup helpers (policies need them).
 -- Nobody calls the trigger functions directly.
 revoke all on all functions in schema private from public, anon, authenticated;
@@ -274,7 +298,7 @@ grant execute on function private.my_client_ids() to authenticated;
 -- ---------- Data API access ----------
 -- New Supabase projects don't expose new tables automatically, so grant
 -- signed-in users access explicitly. Row level security below decides which rows.
-revoke all on public.trainers, public.clients, public.checkins, public.client_plans, public.plan_templates, public.workout_logs, public.health_daily from anon;
+revoke all on public.trainers, public.clients, public.checkins, public.client_plans, public.plan_templates, public.workout_logs, public.health_daily, public.water_daily from anon;
 grant select on public.trainers to authenticated;
 grant select, insert, update, delete on public.clients to authenticated;
 grant select, insert, update, delete on public.checkins to authenticated;
@@ -282,6 +306,7 @@ grant select, insert, update, delete on public.client_plans to authenticated;
 grant select, insert, update, delete on public.plan_templates to authenticated;
 grant select, insert, update, delete on public.workout_logs to authenticated;
 grant select, insert, update, delete on public.health_daily to authenticated;
+grant select, insert, update, delete on public.water_daily to authenticated;
 
 -- ---------- row level security ----------
 alter table public.trainers enable row level security;
@@ -291,6 +316,7 @@ alter table public.client_plans enable row level security;
 alter table public.plan_templates enable row level security;
 alter table public.workout_logs enable row level security;
 alter table public.health_daily enable row level security;
+alter table public.water_daily enable row level security;
 
 drop policy if exists "trainers read self" on public.trainers;
 create policy "trainers read self" on public.trainers
@@ -392,6 +418,27 @@ create policy "health update own" on public.health_daily
 
 drop policy if exists "health delete" on public.health_daily;
 create policy "health delete" on public.health_daily
+  for delete to authenticated
+  using ((select private.is_trainer()) or client_id in (select private.my_client_ids()));
+
+drop policy if exists "water read" on public.water_daily;
+create policy "water read" on public.water_daily
+  for select to authenticated
+  using ((select private.is_trainer()) or client_id in (select private.my_client_ids()));
+
+drop policy if exists "water write own" on public.water_daily;
+create policy "water write own" on public.water_daily
+  for insert to authenticated
+  with check (client_id in (select private.my_client_ids()));
+
+drop policy if exists "water update own" on public.water_daily;
+create policy "water update own" on public.water_daily
+  for update to authenticated
+  using (client_id in (select private.my_client_ids()))
+  with check (client_id in (select private.my_client_ids()));
+
+drop policy if exists "water delete" on public.water_daily;
+create policy "water delete" on public.water_daily
   for delete to authenticated
   using ((select private.is_trainer()) or client_id in (select private.my_client_ids()));
 

@@ -112,8 +112,8 @@ function summaryText(c, s, forClient) {
 
 /* ---------- data backends ---------- */
 const BUCKET = "progress-photos";
-const fromClientRow = r => ({ id: r.id, userId: r.user_id, email: r.email, name: r.name, sex: r.sex, dob: r.dob, height: num(r.height_in), goal: r.goal, glp1: !!r.on_glp1, active: r.active !== false });
-const toClientRow = c => ({ email: c.email, name: c.name, sex: c.sex, dob: c.dob || null, height_in: c.height, goal: c.goal || null, on_glp1: !!c.glp1 });
+const fromClientRow = r => ({ id: r.id, userId: r.user_id, email: r.email, name: r.name, sex: r.sex, dob: r.dob, height: num(r.height_in), goal: r.goal, glp1: !!r.on_glp1, active: r.active !== false, waterGoal: num(r.water_goal_oz) });
+const toClientRow = c => ({ email: c.email, name: c.name, sex: c.sex, dob: c.dob || null, height_in: c.height, goal: c.goal || null, on_glp1: !!c.glp1, water_goal_oz: c.waterGoal ?? null });
 const FEEL_KEYS = ["energy", "hunger", "sleep_q", "sleep_hours", "steps", "side_effects"];
 const SIDE_EFFECTS = ["Nausea", "Vomiting", "Constipation", "Diarrhea", "Heartburn", "Bloating", "Tired", "Headache", "Dizzy", "Low appetite"];
 const fromCheckinRow = r => ({ id: r.id, clientId: r.client_id, date: r.date, weight: num(r.weight_lb), waist: num(r.waist_in), neck: num(r.neck_in), hip: num(r.hip_in), omron: num(r.omron_bf), photoFront: r.photo_front, photoSide: r.photo_side, note: r.note, energy: num(r.energy), hunger: num(r.hunger), sleepQ: num(r.sleep_q), sleepH: num(r.sleep_hours), steps: num(r.steps), sideEffects: Array.isArray(r.side_effects) ? r.side_effects : [], coachNote: r.coach_note || null, coachNoteAt: r.coach_note_at || null, enteredBy: r.entered_by, createdAt: r.created_at });
@@ -126,7 +126,7 @@ const isMissing = e => !!e && (e.code === "42P01" || e.code === "42703" || e.cod
 const toCheckinRow = e => ({ client_id: e.clientId, date: e.date, weight_lb: e.weight, waist_in: e.waist, neck_in: e.neck, hip_in: e.hip, omron_bf: e.omron, photo_front: e.photoFront, photo_side: e.photoSide, note: e.note,
   energy: e.energy ?? null, hunger: e.hunger ?? null, sleep_q: e.sleepQ ?? null, sleep_hours: e.sleepH ?? null, steps: e.steps ?? null, side_effects: e.sideEffects && e.sideEffects.length ? e.sideEffects : null });
 /* Before the October 2026 database update the new columns don't exist yet; save without them. */
-const withoutFeel = row => { const r = { ...row }; FEEL_KEYS.forEach(k => delete r[k]); delete r.on_glp1; return r; };
+const withoutFeel = row => { const r = { ...row }; FEEL_KEYS.forEach(k => delete r[k]); delete r.on_glp1; delete r.water_goal_oz; return r; };
 
 function supaApi(sb) {
   const chk = ({ data, error }) => { if (error) throw error; return data; };
@@ -137,7 +137,7 @@ function supaApi(sb) {
     async saveClient(c, id) {
       const save = row => id ? sb.from("clients").update(row).eq("id", id).select().single() : sb.from("clients").insert(row).select().single();
       let res = await save(toClientRow(c));
-      if (res.error && isMissing(res.error)) { res = await save(withoutFeel(toClientRow(c))); if (!res.error) toast("Saved. Run the database update in tracker/SETUP.md to keep the GLP-1 setting."); }
+      if (res.error && isMissing(res.error)) { res = await save(withoutFeel(toClientRow(c))); if (!res.error) toast("Saved. Run the latest database update (supabase/schema.sql) to keep the GLP-1 and water settings."); }
       return fromClientRow(chk(res));
     },
     async setActive(id, active) {
@@ -182,6 +182,8 @@ function supaApi(sb) {
       const clean = rows.map(r => ({ client_id: clientId, date: r.date, steps: rng(r.steps, 0, 200000, true), sleep_hours: rng(r.sleepHours, 0, 24), weight_lb: rng(r.weightLb, 50, 900), active_kcal: rng(r.activeKcal, 0, 20000, true), exercise_min: rng(r.exerciseMin, 0, 1440, true), resting_hr: rng(r.restingHr, 20, 250, true), source: "apple_health" }));
       if (clean.length) chk(await sb.from("health_daily").upsert(clean, { onConflict: "client_id,date" }));
     },
+    async listWater(clientId) { return chk(await sb.from("water_daily").select("date,oz").eq("client_id", clientId).order("date", { ascending: false }).limit(60)).map(r => ({ date: r.date, oz: num(r.oz) || 0 })); },
+    async setWater(clientId, date, oz) { chk(await sb.from("water_daily").upsert({ client_id: clientId, date, oz }, { onConflict: "client_id,date" })); },
     async listWorkouts(clientId) { return chk(await sb.from("workout_logs").select("*").eq("client_id", clientId).order("date", { ascending: false }).order("created_at", { ascending: false }).limit(300)).map(fromWorkoutRow); },
     async addWorkout(w) { return fromWorkoutRow(chk(await sb.from("workout_logs").insert({ client_id: w.clientId, date: w.date, day_name: w.dayName || null, entries: w.entries, note: w.note || null }).select().single())); },
     async deleteWorkout(id) { chk(await sb.from("workout_logs").delete().eq("id", id)); },
@@ -224,6 +226,8 @@ function demoApi(asClient) {
   /* Sample Apple Health days for the demo client, newest first. */
   const health = Array.from({ length: 21 }, (_, i) => { const d = new Date(2026, 9, 1 - i); const iso = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
     return { date: iso, steps: 7000 + ((i * 1337) % 4200), sleepH: 6.4 + ((i * 7) % 12) / 10, weight: +(154.6 + i * 0.12).toFixed(1), kcal: 380 + ((i * 53) % 260), exMin: 22 + ((i * 11) % 35), rhr: 61 + (i % 4), updatedAt: "2026-10-01T07:30:00Z" }; });
+  /* Sample water: today partly done, the last two weeks mostly near goal. */
+  const water = Array.from({ length: 14 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - i); return { date: d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()), oz: i === 0 ? 32 : [80, 64, 72, 88, 56, 80, 72, 64, 88, 80, 72, 48, 80][i - 1] }; });
   const templates = [{ id: "t1", name: "Sample 3-day plan", title: plans.c1.title, notes: plans.c1.notes, days: JSON.parse(JSON.stringify(plans.c1.days)) }];
   const photos = {};
   const wait = () => new Promise(r => setTimeout(r, 120));
@@ -244,6 +248,8 @@ function demoApi(asClient) {
     async saveFeedback(eid, note) { await wait(); const e = entries.find(x => x.id === eid); e.coachNote = note || null; e.coachNoteAt = note ? new Date().toISOString() : null; return { ...e }; },
     async listHealth(id) { await wait(); return id === "c1" ? health.slice() : []; },
     async upsertHealth(id, rows) { await wait(); rows.forEach(r => { const i = health.findIndex(h => h.date === r.date); const h = { date: r.date, steps: r.steps ?? null, sleepH: r.sleepHours ?? null, weight: r.weightLb ?? null, kcal: r.activeKcal ?? null, exMin: r.exerciseMin ?? null, rhr: r.restingHr ?? null, updatedAt: new Date().toISOString() }; if (i >= 0) health[i] = h; else health.push(h); }); health.sort((a, b) => b.date.localeCompare(a.date)); },
+    async listWater(id) { await wait(); return id === "c1" ? water.map(w => ({ ...w })) : []; },
+    async setWater(id, date, oz) { await wait(); const w = water.find(x => x.date === date); if (w) w.oz = oz; else { water.push({ date, oz }); water.sort((a, b) => b.date.localeCompare(a.date)); } },
     async listWorkouts(id) { await wait(); return workouts.filter(w => w.clientId === id).sort((a, b) => b.date.localeCompare(a.date) || String(b.createdAt).localeCompare(String(a.createdAt))).map(w => JSON.parse(JSON.stringify(w))); },
     async addWorkout(w) { await wait(); const n = { ...JSON.parse(JSON.stringify(w)), id: uid(), enteredBy: "me", createdAt: new Date().toISOString() }; workouts.push(n); return n; },
     async deleteWorkout(id) { await wait(); workouts = workouts.filter(w => w.id !== id); },
@@ -273,7 +279,7 @@ if (RENOVO) {
 }
 const IS_HOME_APP = IN_APP || window.navigator.standalone === true || (window.matchMedia && matchMedia("(display-mode: standalone)").matches);
 let sb = null, api = null;
-const S = { me: null, isTrainer: false, clients: [], sel: null, checkins: [], plan: null, planMissing: false, templates: [], workouts: [], workoutsMissing: false, health: [], healthMissing: false, app: { connected: false, lastSync: null }, urls: {}, screen: "loading", metric: "bf", view: "front", cmpA: null, cmpB: null, overlay: false, fade: 50, authEmail: "", authStep: "email", pwMode: null, pwBack: null };
+const S = { me: null, isTrainer: false, clients: [], sel: null, checkins: [], plan: null, planMissing: false, templates: [], workouts: [], workoutsMissing: false, health: [], healthMissing: false, water: [], waterMissing: false, app: { connected: false, lastSync: null }, urls: {}, screen: "loading", metric: "bf", view: "front", cmpA: null, cmpB: null, overlay: false, fade: 50, authEmail: "", authStep: "email", pwMode: null, pwBack: null };
 const store = { get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (_) {} } };
 const client = () => S.clients.find(c => c.id === S.sel) || null;
 const canDelete = e => S.isTrainer || (S.me && e.enteredBy === S.me.id);
@@ -308,7 +314,7 @@ function render() {
   if (S.screen === "paused") { app.innerHTML = pausedScreen(); return; }
   if (!S.clients.length) { app.innerHTML = welcome(); const b = $("#welcomeAdd"); if (b) b.onclick = () => openClient(null); return; }
   const c = client(); const s = series(c, S.checkins);
-  app.innerHTML = `<div class="stack">${head(c, s)}${coachCallout(c)}${tiles(c, s)}${planCard(c)}${healthCard(c)}${workoutsCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div>${RENOVO && !S.isTrainer ? shopCard() : ""}</div>`;
+  app.innerHTML = `<div class="stack">${head(c, s)}${coachCallout(c)}${S.isTrainer ? "" : waterCard(c)}${tiles(c, s)}${planCard(c)}${healthCard(c)}${S.isTrainer ? waterCard(c) : ""}${workoutsCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div>${RENOVO && !S.isTrainer ? shopCard() : ""}</div>`;
   wire(c, s);
 }
 
@@ -579,6 +585,7 @@ function wire(c, s) {
   const on = (sel, fn) => { const el = $(sel); if (el) el.onclick = fn; };
   on("#editClient", () => openClient(c)); on("#newEntry", () => openEntry(c)); on("#firstEntry", () => openEntry(c));
   on("#toggleActive", () => toggleActive(c));
+  wireWater(c);
   on("#editPlan", () => openPlan(c)); on("#buildPlan", () => openPlan(c));
   on("#connectHealth", () => { const b = $("#connectHealth"); b.disabled = true; b.textContent = "Waiting for Apple Health…"; toApp({ type: "connectHealth" }); });
   on("#syncHealth", () => { const b = $("#syncHealth"); b.disabled = true; b.textContent = "Syncing…"; toApp({ type: "syncHealth" }); });
@@ -642,6 +649,7 @@ async function loadCheckins() {
     await loadPlan();
     await loadWorkouts();
     await loadHealth();
+    await loadWater();
     const paths = S.checkins.flatMap(e => [e.photoFront, e.photoSide]).filter(p => p && !S.urls[p]);
     if (paths.length) Object.assign(S.urls, await api.photoUrls(paths));
   } catch (err) { console.error(err); toast("Couldn't load check-ins. Check your connection and reload."); }
@@ -668,7 +676,7 @@ function openClient(c) {
   $("#cTitle").textContent = c ? "Edit client" : "New client";
   $("#c-name").value = c?.name || ""; $("#c-email").value = c?.email || ""; $("#c-sex").value = c?.sex || "female"; $("#c-dob").value = c?.dob || "";
   $("#c-ft").value = c?.height ? Math.floor(c.height / 12) : ""; $("#c-in").value = c?.height ? Math.round((c.height % 12) * 2) / 2 : "";
-  $("#c-goal").value = c?.goal || ""; $("#c-glp1").checked = !!c?.glp1; $("#cErr").textContent = "";
+  $("#c-goal").value = c?.goal || ""; $("#c-glp1").checked = !!c?.glp1; $("#c-water").value = c?.waterGoal ?? ""; $("#cErr").textContent = "";
   const del = $("#cDelete"); del.hidden = !c; del.classList.remove("armed"); del.textContent = "Delete client"; del.disabled = false;
   $("#dlgClient").showModal();
 }
@@ -687,7 +695,9 @@ $("#fClient").onsubmit = async ev => {
   if (!name) { err.textContent = "Add the client's name."; return; }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = "Add the email the client will sign in with."; return; }
   if (ft == null || ft < 3 || ft > 7 || inch < 0 || inch >= 12) { err.textContent = "Height is needed for the tape formula. Enter feet and inches."; return; }
-  const d = { name, email, sex: $("#c-sex").value, dob: $("#c-dob").value || null, height: ft * 12 + inch, goal: $("#c-goal").value.trim() || null, glp1: $("#c-glp1").checked };
+  const wg = num($("#c-water").value);
+  if (wg != null && (wg < 16 || wg > 256)) { err.textContent = "Water goal should be between 16 and 256 oz, or leave it empty."; return; }
+  const d = { name, email, sex: $("#c-sex").value, dob: $("#c-dob").value || null, height: ft * 12 + inch, goal: $("#c-goal").value.trim() || null, glp1: $("#c-glp1").checked, waterGoal: wg != null ? Math.round(wg) : null };
   const btn = $("#cSave"); btn.disabled = true; err.textContent = "";
   try {
     const saved = await api.saveClient(d, editing?.id);
@@ -852,6 +862,52 @@ function healthCard(c) {
     <div class="tiles">${big("Avg steps", last7("steps") != null ? Math.round(last7("steps")).toLocaleString("en-US") : null, "/day", "")}${big("Avg sleep", last7("sleepH") != null ? f1(last7("sleepH")) : null, "h", "")}
       ${big("Weight", wNow ? f1(wNow.weight) : null, "lb", wNow && wOld ? `${sgn(wNow.weight - wOld.weight)} lb vs a week earlier` : wNow ? fmtD(wNow.date) : "")}</div>
     <div class="hk-more">${small("active cal/day", last7("kcal") != null ? Math.round(last7("kcal")) : null)}${small("exercise min/day", last7("exMin") != null ? Math.round(last7("exMin")) : null)}${small("resting HR", last7("rhr") != null ? Math.round(last7("rhr")) + " bpm" : null)}<span class="muted">${wk.length} of 7 days synced</span></div></section>`;
+}
+
+/* ---------- water ---------- */
+async function loadWater() {
+  S.water = [];
+  try { S.water = await api.listWater(S.sel); S.waterMissing = false; }
+  catch (err) { if (isMissing(err)) S.waterMissing = true; else console.error(err); }
+}
+/* The trainer's goal if set; otherwise half the latest body weight in ounces, rounded to a full glass (64–128 oz). */
+function waterGoal(c) {
+  if (c.waterGoal) return c.waterGoal;
+  const w = [...S.checkins].reverse().find(e => e.weight)?.weight ?? S.health.find(h => h.weight != null)?.weight;
+  if (!w) return 64;
+  return Math.min(128, Math.max(64, Math.round(w / 2 / 8) * 8));
+}
+const waterOn = date => S.water.find(w => w.date === date)?.oz || 0;
+const DROP = `<svg viewBox="0 0 16 20" aria-hidden="true"><path d="M8 1.5C8 1.5 2 8.6 2 12.6A6 6 0 0 0 14 12.6C14 8.6 8 1.5 8 1.5Z"/></svg>`;
+function waterCard(c) {
+  if (S.waterMissing) return "";
+  const t = todayISO(), goal = waterGoal(c), oz = waterOn(t), pct = Math.min(100, Math.round(oz / goal * 100));
+  const wk = Array.from({ length: 7 }, (_, i) => { const d = toDate(t); d.setDate(d.getDate() - i); return waterOn(d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate())); });
+  const past = wk.slice(1), logged = past.filter(v => v > 0);
+  if (S.isTrainer && !S.water.length) return "";
+  const glasses = Math.min(16, Math.round(goal / 8)), full = Math.min(glasses, Math.floor(oz / 8));
+  const drops = Array.from({ length: glasses }, (_, i) => `<span class="drop${i < full ? " on" : ""}">${DROP}</span>`).join("");
+  const done = oz >= goal;
+  const stats = logged.length ? `<span><b>${Math.round(avg(logged))} oz</b> avg last week</span><span><b>${past.filter(v => v >= goal).length} of 6</b> days at goal</span>` : `<span class="muted">Each tap is one 8 oz glass.</span>`;
+  return `<section class="card water" id="waterCard"><div class="card-h"><div><div class="kicker">${S.isTrainer ? "Water today" : "Today"}</div><h2>${S.isTrainer ? `${esc(firstName(c.name))}'s water` : "Water"}</h2></div>
+    ${done ? `<span class="pill good">${ICON_OK}Goal hit</span>` : ""}</div>
+    <div class="w-num"><span class="big">${oz}<small> / ${goal} oz</small></span><span class="muted small">${done ? "Nice work. Keep sipping." : `${goal - oz} oz to go`}</span></div>
+    <div class="w-bar" role="progressbar" aria-label="Water today" aria-valuemin="0" aria-valuemax="${goal}" aria-valuenow="${oz}"><span style="width:${pct}%"></span></div>
+    <div class="drops" aria-hidden="true">${drops}</div>
+    ${S.isTrainer ? "" : `<div class="w-btns"><button class="btn sm" type="button" data-water="-8" ${oz ? "" : "disabled"} aria-label="Remove 8 ounces">−8</button><button class="btn primary" type="button" data-water="8">+ 8 oz</button><button class="btn" type="button" data-water="16">+ 16 oz</button></div>`}
+    <div class="hk-more">${stats}</div></section>`;
+}
+let waterSave = Promise.resolve();
+function wireWater(c) {
+  $$("[data-water]").forEach(b => b.onclick = () => {
+    const t = todayISO(), goal = waterGoal(c), before = waterOn(t);
+    const oz = Math.max(0, Math.min(640, before + Number(b.dataset.water)));
+    const row = S.water.find(w => w.date === t);
+    if (row) row.oz = oz; else S.water.unshift({ date: t, oz });
+    const card = $("#waterCard"); if (card) { card.outerHTML = waterCard(c); wireWater(c); }
+    if (before < goal && oz >= goal) toast("Water goal hit! 💧");
+    waterSave = waterSave.then(() => api.setWater(c.id, t, oz)).catch(err => { console.error(err); toast("Couldn't save your water. Check your connection."); });
+  });
 }
 
 /* ---------- coach feedback + workout plans ---------- */

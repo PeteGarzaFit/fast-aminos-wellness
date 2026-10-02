@@ -14,7 +14,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="FA Tracker">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="stylesheet" href="app.css?v=20261002m">
+<link rel="stylesheet" href="app.css?v=20261002n">
 </head>
 <body>
 <header class="bar">
@@ -41,6 +41,7 @@
       <div class="field"><label for="c-ft">Height, feet</label><input id="c-ft" type="number" inputmode="numeric" min="3" max="7" step="1"></div>
       <div class="field"><label for="c-in">Height, inches</label><input id="c-in" type="number" inputmode="decimal" min="0" max="11.5" step="0.5"></div>
     </div>
+    <div class="field"><label for="c-water">Daily water goal, oz (optional)</label><input id="c-water" type="number" inputmode="numeric" min="16" max="256" step="8" placeholder="Leave empty: half their body weight in oz"></div>
     <div class="field"><label for="c-goal">Goal (optional)</label><input id="c-goal" type="text" placeholder="e.g. Drop 10 lb of fat, keep lean mass"></div>
     <label class="chk" for="c-glp1"><input id="c-glp1" type="checkbox"> On a GLP-1 medication <span class="hint">(adds side-effect questions to their check-ins)</span></label>
     <div class="err" id="cErr"></div>
@@ -134,9 +135,9 @@
   </form>
 </dialog>
 
-<script src="config.js?v=20261002m"></script>
+<script src="config.js?v=20261002n"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
-<script src="library.js?v=20261002m"></script>
-<script src="app.js?v=20261002m"></script>
+<script src="library.js?v=20261002n"></script>
+<script src="app.js?v=20261002n"></script>
 </body>
 </html>

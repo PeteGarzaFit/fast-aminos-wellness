@@ -1,0 +1,47 @@
+# RENOVO iPhone app. Generate the Xcode project on a Mac with:
+#   brew install xcodegen && cd ios && xcodegen
+# See ios/README.md for the full steps.
+name: Renovo
+options:
+  bundleIdPrefix: com.renovocoach
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+targets:
+  Renovo:
+    type: application
+    platform: iOS
+    sources:
+      - path: Renovo
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.renovocoach.app
+        PRODUCT_NAME: Renovo
+        CODE_SIGN_STYLE: Automatic
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_PREVIEWS: YES
+    info:
+      path: Renovo/Info.plist
+      properties:
+        CFBundleDisplayName: RENOVO
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSApplicationCategoryType: public.app-category.healthcare-fitness
+        ITSAppUsesNonExemptEncryption: false
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSHealthShareUsageDescription: RENOVO reads your steps, sleep, weight, workouts and resting heart rate so you and your coach can see your progress. You choose what to share, and you can change it anytime in the Health app.
+    entitlements:
+      path: Renovo/Renovo.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+        com.apple.developer.healthkit.access: []

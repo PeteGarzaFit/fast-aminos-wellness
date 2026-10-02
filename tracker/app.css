@@ -314,3 +314,19 @@ td .feelline{display:block;font-size:12px;color:var(--ink-2);margin-top:2px;whit
 .fa-links{display:flex;flex-wrap:wrap;gap:8px}
 .renovo .brand{text-decoration:none}
 @media (max-width:640px){.renovo .brand-sub{display:none}}
+/* RENOVO dark header + client panel (matches the 45/30 box) */
+.renovo .bar{background:linear-gradient(150deg,#0b1f3d 0%,#050b12 80%);border-bottom:0}
+.renovo .rv-logo{color:#fff}
+.renovo .brand-sub{color:#9FB3D9;border-color:rgba(255,255,255,.2)}
+.renovo .bar .who{color:#9FB3D9}
+.renovo .bar .btn{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.22);color:#fff}
+.renovo .bar .btn.ghost{background:none;border-color:transparent}
+.renovo .bar select{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.22);color:#fff}
+.renovo .bar select option{color:#111827}
+.renovo .chead{background:radial-gradient(circle at 92% 0%,rgba(22,131,255,.4),transparent 45%),linear-gradient(135deg,#0B1B3F 0%,#12306E 100%);color:#fff;border-radius:20px;padding:22px}
+.renovo .chead .kicker{color:#5FD4FF}
+.renovo .chead .meta{color:#C9D5EE}
+.renovo .chead .btn{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.25);color:#fff}
+.renovo .chead .btn.primary{background:#1683ff;border-color:#1683ff}
+.renovo .chead .pill.good{background:rgba(95,212,255,.16);color:#9FE3FF}
+.renovo .chead .pill.warn{background:rgba(253,241,214,.16);color:#FDE7B0}

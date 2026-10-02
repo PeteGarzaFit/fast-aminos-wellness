@@ -35,6 +35,12 @@ h1{font-family:var(--serif);font-weight:500;font-size:clamp(34px,5vw,54px);line-
 .hint{font-size:11.5px;color:var(--faint)}
 input[type=number]{width:100%;background:var(--white);border:1px solid #D7DFEA;border-radius:10px;padding:10px 11px;font-size:16px;min-width:0}
 input:focus{border-color:var(--blue);outline:none}
+.flabel{font-size:12.5px;font-weight:650;color:var(--ink-2)}
+.seg{display:flex;background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:3px;gap:3px}
+.seg label{flex:1;text-align:center;cursor:pointer;border-radius:9px;padding:9px 10px;font-size:14px;font-weight:650;color:var(--muted)}
+.seg label{position:relative}.seg input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;pointer-events:none}
+.seg label:has(input:checked){background:var(--white);box-shadow:0 1px 3px rgba(16,24,40,.12);color:var(--blue)}
+.seg label:has(input:focus-visible){outline:2px solid var(--blue);outline-offset:1px}
 details{border-top:1px solid var(--grid);padding-top:12px}
 summary{cursor:pointer;font-size:13.5px;font-weight:700;color:var(--blue)}
 details .field{margin-top:12px}
@@ -77,12 +83,20 @@ footer p{margin:0;max-width:900px}
 <section class="hero">
   <div class="kicker">Free tool</div>
   <h1>Find your Zone 2 heart rate</h1>
-  <p>Zone 2 is the easy, steady pace where your body burns the most fat for fuel. Most people walk too slow or push too hard to stay in it. Enter your age to get your number.</p>
+  <p>Zone 2 is the easy, steady pace where your body burns the most fat for fuel. Most people walk too slow or push too hard to stay in it. Enter your age and sex to get your number.</p>
 </section>
 
 <div class="layout">
   <section class="card" aria-label="Your details">
     <h2>Your details</h2>
+    <div class="field">
+      <span class="flabel">Sex</span>
+      <div class="seg" role="radiogroup" aria-label="Sex">
+        <label><input type="radio" name="sex" value="female" id="sex-f"><span>Female</span></label>
+        <label><input type="radio" name="sex" value="male" id="sex-m" checked><span>Male</span></label>
+      </div>
+      <span class="hint">Women's max heart rate runs lower, so their zones do too.</span>
+    </div>
     <div class="field">
       <label for="age">Age</label>
       <input id="age" type="number" inputmode="numeric" min="13" max="90" placeholder="e.g. 40">
@@ -114,7 +128,7 @@ footer p{margin:0;max-width:900px}
 </div>
 </main>
 
-<footer><div class="wrap"><p>For general fitness education only, not medical advice. Age-based formulas are estimates and can be off by 10 bpm or more; your breathing and the talk test are the real check. If you take heart rate–lowering medication (like beta blockers), have a heart condition, or are pregnant, ask your healthcare provider for your training zones before using these numbers.</p></div></footer>
+<footer><div class="wrap"><p>For general fitness education only, not medical advice. Max heart rate is estimated with 220 − age for men and 206 − 0.88 × age for women (Gulati et al., <i>Circulation</i>, 2010). Age-based formulas are estimates and can be off by 10 bpm or more; your breathing and the talk test are the real check. If you take heart rate–lowering medication (like beta blockers), have a heart condition, or are pregnant, ask your healthcare provider for your training zones before using these numbers.</p></div></footer>
 
 <script>
 (function(){
@@ -129,10 +143,12 @@ const ZONES=[
   {n:5,name:"Max effort",lo:.90,hi:1.0,c:"var(--z5)"}
 ];
 /* Exposed for testing. */
-function zone2(age,mhrIn){
-  const mhr=mhrIn!=null?mhrIn:220-age;
-  return {mhr,est:mhrIn==null,lo:Math.round(mhr*.60),hi:Math.round(mhr*.70),mid:Math.round(mhr*.65),
-    zones:ZONES.map(z=>({...z,from:Math.round(mhr*z.lo),to:Math.round(mhr*z.hi)}))};
+/* Max HR: men 220 - age; women 206 - 0.88 x age (Gulati et al., Circulation 2010). */
+function zone2(age,mhrIn,sex){
+  const est=sex==="female"?206-0.88*age:220-age;
+  const x=mhrIn!=null?mhrIn:est, mhr=Math.round(x);
+  return {mhr,est:mhrIn==null,lo:Math.round(x*.60),hi:Math.round(x*.70),mid:Math.round(x*.65),
+    zones:ZONES.map(z=>({...z,from:Math.round(x*z.lo),to:Math.round(x*z.hi)}))};
 }
 window.__zone2=zone2;
 
@@ -142,7 +158,8 @@ function update(){
   const mhr=(m!=null&&m>=120&&m<=230)?m:null;
   const ageOk=age!=null&&age>=13&&age<=90;
   if(!ageOk&&mhr==null){out.innerHTML='<div class="empty">Enter your age to see your Zone 2 range.</div>';return;}
-  const r=zone2(age,mhr);
+  const sex=document.querySelector('input[name=sex]:checked').value;
+  const r=zone2(age,mhr,sex);
   const span=r.mhr-Math.round(r.mhr*.5);
   out.innerHTML=`<div class="res-lbl">Your Zone 2</div>
   <div class="big">${r.lo}–${r.hi}<small>bpm</small></div>
@@ -150,11 +167,12 @@ function update(){
   <div class="zones" role="list" aria-label="All heart rate zones">
   ${r.zones.slice().reverse().map(z=>`<div class="zone${z.n===2?" cur":""}" role="listitem"><span class="zn">Zone ${z.n}<small>${z.name}</small></span><span class="zb" style="background:${z.c};width:${(z.to-Math.round(r.mhr*.5))/span*100}%"></span><span class="zr">${z.from}–${z.to}</span></div>`).join("")}
   </div>
-  <div class="method">Based on ${r.est?`an estimated max heart rate of <b>${r.mhr} bpm</b> (220 − age)`:`your max heart rate of <b>${r.mhr} bpm</b>`}. Zone 2 = 60–70% of max. If the talk test says you're working harder than this, trust the talk test.</div>`;
+  <div class="method">Based on ${r.est?`an estimated max heart rate of <b>${r.mhr} bpm</b> (${sex==="female"?"206 − 0.88 × age, the women-specific formula from Gulati et al., 2010":"220 − age"})`:`your max heart rate of <b>${r.mhr} bpm</b>`}. Zone 2 = 60–70% of max. If the talk test says you're working harder than this, trust the talk test.</div>`;
 }
 document.addEventListener("input",update);
 const q=new URLSearchParams(location.search);
 if(q.get("age")&&isFinite(+q.get("age")))$("#age").value=q.get("age");
+if(q.get("sex")==="female")$("#sex-f").checked=true;
 update();
 })();
 </script>

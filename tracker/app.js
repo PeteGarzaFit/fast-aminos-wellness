@@ -872,13 +872,13 @@ function openWorkout(c, dayIdx) {
   $("#wTitle").textContent = wDraft.dayName;
   $("#wSub").textContent = S.isTrainer ? `Logging for ${firstName(c.name)}` : "Log each set as you go. Leave a set blank if you skipped it.";
   $("#w-date").value = wDraft.date; $("#w-date").max = todayISO(); $("#w-note").value = ""; $("#wErr").textContent = "";
-  drawWorkout(); $("#dlgWorkout").showModal();
+  drawWorkout(); stopRest(); $("#dlgWorkout").showModal(); keepAwake();
 }
 function drawWorkout() {
   $("#wList").innerHTML = wDraft.entries.map((e, ei) => {
     const prev = lastFor(e.name), x = e.plan;
     const last = prev ? `<div class="wlast">Last time (${fmtD(prev.w.date)}): <b>${prev.e.sets.filter(st => st.reps != null).map(fmtSet).join(", ")}</b></div>` : "";
-    const head = `<div class="wex-h"><div><div class="wname">${esc(e.name)}</div><div class="wtarget">Target ${esc(e.target)}${x.rest ? ` · rest ${esc(x.rest)}` : ""}</div></div>${refUrl(e.ref) ? `<a class="plink" href="${refUrl(e.ref)}" target="_blank" rel="noopener">Form →</a>` : ""}</div>`;
+    const head = `<div class="wex-h"><div><div class="wname">${esc(e.name)}</div><div class="wtarget">Target ${esc(e.target)}${x.rest ? ` · rest ${esc(x.rest)}` : ""}</div></div><div class="wex-a">${refUrl(e.ref) ? `<a class="plink" href="${refUrl(e.ref)}" target="_blank" rel="noopener">Form →</a>` : ""}${e.timed ? "" : `<button type="button" class="restbtn" data-rest="${ei}" aria-label="Start ${fmtClock(restSecs(x.rest))} rest timer">Rest ${fmtClock(restSecs(x.rest))}</button>`}</div></div>`;
     if (e.timed) return `<div class="wex">${head}${x.note ? `<div class="pnote">${esc(x.note)}</div>` : ""}<label class="wdone"><input type="checkbox" data-done="${ei}"${e.done ? " checked" : ""}> Done</label></div>`;
     const ph = prev ? prev.e.sets.filter(st => st.lb != null).map(st => st.lb) : [];
     const rows = e.sets.map((st, si) => `<div class="wset"><span class="snum">Set ${si + 1}</span>
@@ -892,8 +892,19 @@ $("#wList").addEventListener("input", ev => {
   if (t.dataset.k) wDraft.entries[+t.dataset.e].sets[+t.dataset.s][t.dataset.k] = t.value;
   if (t.dataset.done != null) wDraft.entries[+t.dataset.done].done = t.checked;
 });
+$("#wList").addEventListener("change", ev => {
+  const t = ev.target; if (t.dataset.k !== "reps" || t.value === "") return;
+  const ei = +t.dataset.e, si = +t.dataset.s, e = wDraft.entries[ei];
+  let next;
+  if (si + 1 < e.sets.length) next = `Next: ${e.name}, set ${si + 2}`;
+  else { const n = wDraft.entries.slice(ei + 1).find(x => !x.timed); next = n ? `Next: ${n.name}` : "Last set done. Finish strong!"; }
+  if (si + 1 >= e.sets.length && !wDraft.entries.slice(ei + 1).some(x => !x.timed)) { stopRest(); return; }
+  startRest(restSecs(e.plan.rest), next);
+});
+$("#wList").addEventListener("click", ev => { const r = ev.target.closest("[data-rest]"); if (r) { const e = wDraft.entries[+r.dataset.rest]; startRest(restSecs(e.plan.rest), `Rest: ${e.name}`); } });
 $("#wList").addEventListener("click", ev => { const b = ev.target.closest("[data-addset]"); if (!b) return; const e = wDraft.entries[+b.dataset.addset]; if (e.sets.length < 12) { e.sets.push({ lb: "", reps: "" }); drawWorkout(); } });
 $("#wCancel").onclick = () => $("#dlgWorkout").close();
+$("#dlgWorkout").addEventListener("close", () => { stopRest(); releaseWake(); });
 $("#fWorkout").onsubmit = async ev => {
   ev.preventDefault();
   const err = $("#wErr"), date = $("#w-date").value || todayISO();
@@ -914,6 +925,57 @@ $("#fWorkout").onsubmit = async ev => {
   } catch (e) { console.error(e); err.textContent = isMissing(e) ? "Workout logging needs the latest database update in tracker/SETUP.md." : "Couldn't save. Check your connection and try again."; }
   btn.disabled = false; btn.textContent = "Finish workout";
 };
+
+/* ---------- rest timer ---------- */
+/* "90 sec" → 90, "2 min" → 120, "2–3 min" → 120. Defaults to 90 seconds. */
+function restSecs(str) {
+  const t = String(str || "").toLowerCase(), m = t.match(/\d+(\.\d+)?/);
+  if (!m) return 90;
+  const n = parseFloat(m[0]) * (/min/.test(t) ? 60 : 1);
+  return Math.min(600, Math.max(15, Math.round(n)));
+}
+const fmtClock = sec => { sec = Math.max(0, Math.ceil(sec)); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`; };
+const RT = { end: 0, iv: null, done: false };
+let audioCtx = null;
+function beep() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    [0, 0.28, 0.56].forEach(t0 => { const o = audioCtx.createOscillator(), g = audioCtx.createGain(); o.frequency.value = 880; o.connect(g); g.connect(audioCtx.destination);
+      const t = audioCtx.currentTime + t0; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.35, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2); o.start(t); o.stop(t + 0.22); });
+  } catch (_) {}
+}
+function tickRest() {
+  const left = (RT.end - Date.now()) / 1000, box = $("#rTimer");
+  if (left <= 0 && !RT.done) {
+    RT.done = true; clearInterval(RT.iv); RT.iv = null;
+    box.classList.add("done"); $("#rtTime").textContent = "0:00"; $("#rtNext").textContent = "Time's up. Next set!";
+    try { navigator.vibrate && navigator.vibrate([250, 120, 250]); } catch (_) {}
+    beep(); return;
+  }
+  if (!RT.done) { $("#rtTime").textContent = fmtClock(left); $("#rtBar").style.width = Math.max(0, Math.min(100, left / RT.total * 100)) + "%"; }
+}
+function startRest(sec, next) {
+  // A user gesture is happening right now, so the audio can be unlocked for the beep later.
+  try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === "suspended") audioCtx.resume(); } catch (_) {}
+  RT.end = Date.now() + sec * 1000; RT.total = sec; RT.done = false;
+  const box = $("#rTimer"); box.hidden = false; box.classList.remove("done");
+  $("#rtNext").textContent = next || "Rest";
+  clearInterval(RT.iv); RT.iv = setInterval(tickRest, 250); tickRest();
+}
+function adjustRest(d) {
+  if (RT.done) { startRest(Math.max(15, d), $("#rtNext").textContent === "Time's up. Next set!" ? "Extra rest" : $("#rtNext").textContent); return; }
+  RT.end = Math.max(Date.now() + 1000, RT.end + d * 1000); RT.total = Math.max(RT.total, (RT.end - Date.now()) / 1000); tickRest();
+}
+function stopRest() { clearInterval(RT.iv); RT.iv = null; RT.done = false; const box = $("#rTimer"); if (box) { box.hidden = true; box.classList.remove("done"); } }
+$("#rtMinus").onclick = () => adjustRest(-15);
+$("#rtPlus").onclick = () => adjustRest(15);
+$("#rtStop").onclick = stopRest;
+/* Keep the phone screen on during a workout where supported. */
+let wakeLock = null;
+async function keepAwake() { try { if ("wakeLock" in navigator) { wakeLock = await navigator.wakeLock.request("screen"); } } catch (_) {} }
+function releaseWake() { try { wakeLock && wakeLock.release(); } catch (_) {} wakeLock = null; }
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { if ($("#dlgWorkout").open && !wakeLock) keepAwake(); if (RT.iv) tickRest(); } });
 
 /* Workout history, consistency and strength gains. */
 function workoutsCard(c) {

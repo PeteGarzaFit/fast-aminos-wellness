@@ -38,6 +38,7 @@ input:focus,select:focus{border-color:var(--blue)}
 .btn.ghost:hover{background:var(--grid);color:var(--ink)}
 .btn.danger{color:var(--bad)}
 .btn.danger:hover{border-color:var(--bad);color:var(--bad)}
+.btn.armed:not(.danger){background:var(--warn-soft);border-color:var(--warn);color:var(--warn)}
 .btn.danger.armed{background:var(--bad);border-color:var(--bad);color:#fff}
 .btn[disabled]{opacity:.55;cursor:not-allowed}
 .btn.sm{padding:5px 11px;font-size:13px;border-radius:9px}

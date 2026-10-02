@@ -112,7 +112,7 @@ function summaryText(c, s, forClient) {
 
 /* ---------- data backends ---------- */
 const BUCKET = "progress-photos";
-const fromClientRow = r => ({ id: r.id, userId: r.user_id, email: r.email, name: r.name, sex: r.sex, dob: r.dob, height: num(r.height_in), goal: r.goal, glp1: !!r.on_glp1 });
+const fromClientRow = r => ({ id: r.id, userId: r.user_id, email: r.email, name: r.name, sex: r.sex, dob: r.dob, height: num(r.height_in), goal: r.goal, glp1: !!r.on_glp1, active: r.active !== false });
 const toClientRow = c => ({ email: c.email, name: c.name, sex: c.sex, dob: c.dob || null, height_in: c.height, goal: c.goal || null, on_glp1: !!c.glp1 });
 const FEEL_KEYS = ["energy", "hunger", "sleep_q", "sleep_hours", "steps", "side_effects"];
 const SIDE_EFFECTS = ["Nausea", "Vomiting", "Constipation", "Diarrhea", "Heartburn", "Bloating", "Tired", "Headache", "Dizzy", "Low appetite"];
@@ -138,6 +138,11 @@ function supaApi(sb) {
       const save = row => id ? sb.from("clients").update(row).eq("id", id).select().single() : sb.from("clients").insert(row).select().single();
       let res = await save(toClientRow(c));
       if (res.error && isMissing(res.error)) { res = await save(withoutFeel(toClientRow(c))); if (!res.error) toast("Saved. Run the database update in tracker/SETUP.md to keep the GLP-1 setting."); }
+      return fromClientRow(chk(res));
+    },
+    async setActive(id, active) {
+      const res = await sb.from("clients").update({ active }).eq("id", id).select().single();
+      if (res.error && isMissing(res.error)) throw { code: "needs-update" };
       return fromClientRow(chk(res));
     },
     async deleteClient(id) {
@@ -190,8 +195,8 @@ function supaApi(sb) {
 
 function demoApi(asClient) {
   const clients = [
-    { id: "c1", userId: asClient ? "me" : "u1", email: "sample.client@example.com", name: "Sample Client", sex: "female", dob: "1990-04-12", height: 65, goal: "Lose fat, keep lean mass", glp1: true },
-    { id: "c2", userId: null, email: "sample.two@example.com", name: "Sample Client Two", sex: "male", dob: "1984-11-02", height: 70, goal: "Recomp for summer" }
+    { id: "c1", userId: asClient ? "me" : "u1", email: "sample.client@example.com", name: "Sample Client", sex: "female", dob: "1990-04-12", height: 65, goal: "Lose fat, keep lean mass", glp1: true, active: true },
+    { id: "c2", userId: null, email: "sample.two@example.com", name: "Sample Client Two", sex: "male", dob: "1984-11-02", height: 70, goal: "Recomp for summer", active: false }
   ];
   const raw = [["c1","2026-06-08",162.4,31.5,13.5,39.8,30.1],["c1","2026-06-22",161.0,31.2,13.5,39.6],["c1","2026-07-06",159.8,30.9,13.4,39.4],["c1","2026-07-20",158.6,30.6,13.4,39.3,28.9],["c1","2026-08-03",157.9,30.4,13.4,39.1],["c1","2026-08-17",156.8,30.1,13.3,38.9],["c1","2026-08-31",156.2,29.9,13.3,38.8,27.4],["c1","2026-09-14",155.5,29.7,13.3,38.6],["c1","2026-09-28",155.1,29.3,13.3,38.5],
                ["c2","2026-07-15",212.6,40.5,16.2,null,26.8],["c2","2026-07-29",210.9,40.1,16.2,null],["c2","2026-08-05",210.2,38.8,16.1,null],["c2","2026-08-19",208.4,39.6,16.2,null]];
@@ -227,6 +232,7 @@ function demoApi(asClient) {
     async listClients() { await wait(); return (asClient ? clients.filter(c => c.userId === "me") : clients).slice().sort((a, b) => a.name.localeCompare(b.name)); },
     async listCheckins(id) { await wait(); return entries.filter(e => e.clientId === id); },
     async saveClient(c, id) { await wait(); if (clients.some(x => x.email.toLowerCase() === c.email.toLowerCase() && x.id !== id)) throw { code: "23505" }; if (id) { Object.assign(clients.find(x => x.id === id), c); return clients.find(x => x.id === id); } const n = { ...c, id: uid(), userId: null }; clients.push(n); return n; },
+    async setActive(id, active) { await wait(); const c = clients.find(x => x.id === id); c.active = active; return { ...c }; },
     async deleteClient(id) { await wait(); const i = clients.findIndex(c => c.id === id); if (i >= 0) clients.splice(i, 1); entries = entries.filter(e => e.clientId !== id); },
     async addCheckin(e) { await wait(); const n = { ...e, id: uid(), enteredBy: "me", createdAt: new Date().toISOString(), omron: asClient ? null : e.omron }; entries.push(n); return n; },
     async deleteCheckin(e) { await wait(); entries = entries.filter(x => x.id !== e.id); },
@@ -275,10 +281,10 @@ const canDelete = e => S.isTrainer || (S.me && e.enteredBy === S.me.id);
 /* ---------- header ---------- */
 function renderBar() {
   const el = $("#barRight");
-  if (S.screen !== "app" && S.screen !== "noaccess") { el.innerHTML = ""; return; }
+  if (S.screen !== "app" && S.screen !== "noaccess" && S.screen !== "paused") { el.innerHTML = ""; return; }
   let h = "";
   if (S.screen === "app" && S.isTrainer && S.clients.length) {
-    const opts = S.clients.map(c => `<option value="${esc(c.id)}"${c.id === S.sel ? " selected" : ""}>${esc(c.name)}</option>`).join("");
+    const opts = S.clients.map(c => `<option value="${esc(c.id)}"${c.id === S.sel ? " selected" : ""}>${esc(c.name)}${c.active ? "" : " (paused)"}</option>`).join("");
     h += `<label class="small muted" for="clientPick" hidden>Client</label><select id="clientPick" aria-label="Client">${opts}</select>`;
   }
   if (S.screen === "app" && S.isTrainer) h += `<button class="btn" id="addClient" type="button">Add client</button>`;
@@ -299,6 +305,7 @@ function render() {
   if (S.screen === "login") { app.innerHTML = loginScreen(); wireLogin(); return; }
   if (S.screen === "password") { app.innerHTML = passwordScreen(); wirePassword(); return; }
   if (S.screen === "noaccess") { app.innerHTML = noAccessScreen(); return; }
+  if (S.screen === "paused") { app.innerHTML = pausedScreen(); return; }
   if (!S.clients.length) { app.innerHTML = welcome(); const b = $("#welcomeAdd"); if (b) b.onclick = () => openClient(null); return; }
   const c = client(); const s = series(c, S.checkins);
   app.innerHTML = `<div class="stack">${head(c, s)}${coachCallout(c)}${tiles(c, s)}${planCard(c)}${healthCard(c)}${workoutsCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div>${RENOVO && !S.isTrainer ? shopCard() : ""}</div>`;
@@ -414,6 +421,13 @@ function noAccessScreen() {
   <p class="small">Signed in with a different email than the one you gave ${esc(TRAINER)}? Sign out and use that one.</p></section>`;
 }
 
+function pausedScreen() {
+  const c = S.clients[0];
+  return `<section class="msg"><div class="kicker">Coaching paused</div><h1>Your coaching is paused${c ? `, ${esc(firstName(c.name))}` : ""}</h1>
+  <p>Your check-ins, workouts and progress photos are all saved. To pick up where you left off, contact ${esc(TRAINER)} to restart your coaching.</p>
+  <p class="small">Once ${esc(TRAINER)} turns your coaching back on, reload this page and everything will be right where you left it.</p></section>`;
+}
+
 function welcome() {
   return `<section class="hero"><div><div class="kicker">Trainer setup</div><h1>Omron at the gym. Tape at home.</h1>
   <p>Add a client with their email. Record their baseline at the gym with an Omron reading. They can then sign in from their phone and log weekly tape check-ins, and the app keeps their numbers in line with the gym reading.</p>
@@ -433,10 +447,11 @@ function head(c, s) {
     pill = ago > 42 ? `<span class="pill warn">${ICON_WARN}${S.isTrainer ? "Recalibrate" : "Gym check-in due"}: last Omron ${ago} days ago</span>`
       : `<span class="pill good">${ICON_OK}Calibrated ${sgn(k.off)} pts · Omron ${ago === 0 ? "today" : ago + " days ago"}</span>`;
   }
+  if (S.isTrainer && !c.active) pill = `<span class="pill warn">${ICON_WARN}Coaching paused. ${esc(firstName(c.name))} can't open the tracker until you resume.</span>`;
   const linked = S.isTrainer ? (c.userId ? ` · <span title="${esc(c.email)}">Signed in</span>` : ` · <span title="${esc(c.email)}">Hasn't signed in yet</span>`) : "";
   return `<div class="chead"><div class="grow">${S.isTrainer ? "" : `<div class="kicker">Your progress</div>`}<h1>${esc(c.name)}</h1>
     <div class="meta">${esc(bits)}${c.goal ? ` · Goal: ${esc(c.goal)}` : ""}${linked}</div><div>${pill}</div></div>
-    <div class="actions">${calcLink(c, s)}${S.isTrainer ? `<button class="btn" id="editClient" type="button">Edit client</button>` : ""}<button class="btn primary" id="newEntry" type="button">${S.isTrainer ? "New check-in" : "Log check-in"}</button></div></div>
+    <div class="actions">${calcLink(c, s)}${S.isTrainer ? `<button class="btn" id="editClient" type="button">Edit client</button><button class="btn${c.active ? "" : " primary"}" id="toggleActive" type="button">${c.active ? "Pause coaching" : "Resume coaching"}</button>` : ""}<button class="btn primary" id="newEntry" type="button">${S.isTrainer ? "New check-in" : "Log check-in"}</button></div></div>
   <details class="how"><summary>How the estimate works</summary><p>Each check-in runs the US Navy tape formula on waist, neck${c.sex === "male" ? "" : ", hips"} and height. On gym days the Omron reading is compared with that number and the gap is saved. Home check-ins use the tape number plus the most recent gap. Omron readings swing with water, food and training, so they're taken at the same time of day, before a workout.</p></details>`;
 }
 
@@ -563,6 +578,7 @@ function summaryCard(c, s) {
 function wire(c, s) {
   const on = (sel, fn) => { const el = $(sel); if (el) el.onclick = fn; };
   on("#editClient", () => openClient(c)); on("#newEntry", () => openEntry(c)); on("#firstEntry", () => openEntry(c));
+  on("#toggleActive", () => toggleActive(c));
   on("#editPlan", () => openPlan(c)); on("#buildPlan", () => openPlan(c));
   on("#connectHealth", () => { const b = $("#connectHealth"); b.disabled = true; b.textContent = "Waiting for Apple Health…"; toApp({ type: "connectHealth" }); });
   on("#syncHealth", () => { const b = $("#syncHealth"); b.disabled = true; b.textContent = "Syncing…"; toApp({ type: "syncHealth" }); });
@@ -594,6 +610,26 @@ function wire(c, s) {
   drawChart(s);
 }
 
+/* Pause or resume a client's coaching. Pausing asks for a second tap. */
+async function toggleActive(c) {
+  const btn = $("#toggleActive");
+  if (c.active && !btn.classList.contains("armed")) {
+    btn.classList.add("armed"); btn.textContent = "Tap again to pause";
+    setTimeout(() => { if (btn.isConnected && btn.classList.contains("armed")) { btn.classList.remove("armed"); btn.textContent = "Pause coaching"; } }, 4000);
+    return;
+  }
+  btn.disabled = true;
+  try {
+    const saved = await api.setActive(c.id, !c.active);
+    Object.assign(c, { active: saved.active });
+    toast(saved.active ? `${firstName(c.name)}'s coaching is back on.` : `${firstName(c.name)} is paused. Their history is saved.`);
+    render();
+  } catch (e) {
+    btn.disabled = false;
+    toast(e && e.code === "needs-update" ? "Run the latest database update (supabase/schema.sql) first, then try again." : "Couldn't change that. Check your connection and try again.");
+  }
+}
+
 /* ---------- loading data ---------- */
 async function selectClient(id) {
   S.sel = id; S.cmpA = S.cmpB = null; if (S.isTrainer) store.set("fa_client", id);
@@ -616,6 +652,7 @@ async function loadAll() {
   try { S.clients = await api.listClients(); }
   catch (err) { console.error(err); S.clients = []; toast("Couldn't load your data. Check your connection and reload."); }
   if (!S.isTrainer && !S.clients.length) { S.screen = "noaccess"; render(); return; }
+  if (!S.isTrainer && S.clients.every(c => !c.active)) { S.screen = "paused"; S.checkins = []; render(); return; }
   const saved = store.get("fa_client");
   S.sel = S.clients.find(c => c.id === S.sel) ? S.sel : S.clients.find(c => c.id === saved) ? saved : (S.clients[0]?.id || null);
   S.screen = "app";

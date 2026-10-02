@@ -13,6 +13,9 @@
 --   * Workout logs: a client can log, read and delete their own; trainers see all.
 --   * Apple Health daily totals: written by the client's iPhone app; the client
 --     and trainers can read them.
+--   * Paused clients (active = false) only see their own client record, so the
+--     tracker can tell them coaching is paused. Everything else is hidden until
+--     the trainer resumes them.
 --   * Signed-out visitors (anon) can't read or write anything.
 
 create extension if not exists pgcrypto;
@@ -69,6 +72,11 @@ alter table public.checkins add column if not exists sleep_hours numeric(3,1) ch
 alter table public.checkins add column if not exists steps integer check (steps between 0 and 100000);
 alter table public.checkins add column if not exists side_effects text[] check (cardinality(side_effects) <= 12);
 alter table public.clients add column if not exists on_glp1 boolean not null default false;
+
+-- Active / paused coaching (added October 2026). A paused client can still sign in
+-- and see that they're paused, but can't open or add anything until the trainer
+-- turns coaching back on. Their history is kept.
+alter table public.clients add column if not exists active boolean not null default true;
 
 -- One workout plan per client (added October 2026).
 -- days is a list of {name, items: [{name, sets, reps, rest, note, ref}]}.
@@ -136,9 +144,11 @@ language sql stable security definer set search_path = '' as $$
   select exists (select 1 from public.trainers where user_id = (select auth.uid()));
 $$;
 
+-- Only active clients count, so a paused client loses access to their check-ins,
+-- plan, workouts, Health data and photos until coaching is turned back on.
 create or replace function private.my_client_ids() returns setof uuid
 language sql stable security definer set search_path = '' as $$
-  select id from public.clients where user_id = (select auth.uid());
+  select id from public.clients where user_id = (select auth.uid()) and active;
 $$;
 
 -- When a client record is created (or its email changes), link it to an

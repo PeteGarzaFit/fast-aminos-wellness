@@ -58,11 +58,18 @@ function series(c, entries) {
     r.fat = (r.bf != null && r.e.weight) ? r.e.weight * r.bf / 100 : null;
     r.flags = [];
     const p = rows[i - 1];
+    /* Tape is optional, so compare tape with the last check-in that has tape. */
+    const pt = rows.slice(0, i).reverse().find(x => x.e.waist != null || x.e.neck != null);
+    if (pt) {
+      const dt = Math.max(days(pt.e.date, r.e.date), 1);
+      if (pt.e.waist && r.e.waist && Math.abs(r.e.waist - pt.e.waist) >= 1 && dt <= 14) r.flags.push(`Waist moved ${sgn(r.e.waist - pt.e.waist)} in over ${dt} days. Re-tape to confirm.`);
+      if (pt.e.neck && r.e.neck && Math.abs(r.e.neck - pt.e.neck) >= 0.75) r.flags.push(`Neck changed ${sgn(r.e.neck - pt.e.neck)} in. Neck rarely moves this much; check tape placement.`);
+    }
     if (p) {
       const dd = Math.max(days(p.e.date, r.e.date), 1);
-      if (p.e.waist && r.e.waist && Math.abs(r.e.waist - p.e.waist) >= 1 && dd <= 14) r.flags.push(`Waist moved ${sgn(r.e.waist - p.e.waist)} in over ${dd} days. Re-tape to confirm.`);
-      if (p.e.neck && r.e.neck && Math.abs(r.e.neck - p.e.neck) >= 0.75) r.flags.push(`Neck changed ${sgn(r.e.neck - p.e.neck)} in. Neck rarely moves this much; check tape placement.`);
-      if (p.e.weight && r.e.weight && dd <= 21 && Math.abs(r.e.weight - p.e.weight) / p.e.weight / (dd / 7) > 0.02) r.flags.push(`Weight changed ${sgn(r.e.weight - p.e.weight)} lb in ${dd} days. Check timing, meals and water.`);
+      /* Day-to-day swings of a few pounds are normal water and food weight; only flag big or sustained jumps. */
+      const dw = Math.abs(r.e.weight - p.e.weight);
+      if (p.e.weight && r.e.weight && dd <= 21 && (dd >= 4 ? dw / p.e.weight / (dd / 7) > 0.02 : dw >= 5)) r.flags.push(`Weight changed ${sgn(r.e.weight - p.e.weight)} lb in ${dd} day${dd > 1 ? "s" : ""}. Check timing, meals and water.`);
     }
     if (r.e.energy != null && r.e.energy <= 2) r.flags.push(`Low energy (${r.e.energy}/5). Check calories, protein and sleep.`);
     if (r.e.sideEffects && r.e.sideEffects.length) r.flags.push(`GLP-1 side effects: ${r.e.sideEffects.join(", ").toLowerCase()}.`);
@@ -664,7 +671,7 @@ function openEntry(c) {
   $("#eTitle").textContent = S.isTrainer ? `Check-in for ${firstName(c.name)}` : "Log a check-in";
   $("#hipField").hidden = c.sex === "male";
   $("#omronBox").hidden = !S.isTrainer;
-  $("#eTip").textContent = S.isTrainer ? "Measure at the same time of day as the last check-in, before eating or training. Tape snug, not tight." : "Weigh and measure first thing in the morning, before eating or training. Tape snug, not tight, in the same spots each time.";
+  $("#eTip").textContent = S.isTrainer ? "Measure at the same time of day as the last check-in, before eating or training. Tape snug, not tight." : "Weigh in first thing in the morning, before eating or training. That's all you need most days. Add tape measurements once a week to update your body fat.";
   const ph = (id, v) => { $(id).placeholder = v ? "Last: " + f1(v) : ""; };
   ph("#e-weight", last?.e.weight); ph("#e-waist", last?.e.waist); ph("#e-neck", last?.e.neck); ph("#e-hip", last?.e.hip);
   resetFeel(c); fillFromHealth(); livePreview(); $("#dlgEntry").showModal();
@@ -703,9 +710,9 @@ $("#fEntry").onsubmit = async ev => {
   if (d.steps != null && (d.steps < 0 || d.steps > 100000)) { err.textContent = "Average steps should be between 0 and 100,000."; return; }
   if (d.date > todayISO()) { err.textContent = "The date can't be in the future."; return; }
   if (d.weight == null || d.weight < 50 || d.weight > 700) { err.textContent = "Add today's weight in pounds."; return; }
-  const needTape = d.omron == null;
-  if (needTape && (d.waist == null || d.neck == null || (c.sex !== "male" && d.hip == null))) { err.textContent = c.sex === "male" ? "Add waist and neck measurements." : "Add waist, neck and hip measurements."; return; }
-  if (d.waist != null && d.neck != null && navy(c.sex, c.height, d.waist, d.neck, d.hip) == null && needTape) { err.textContent = "Those tape numbers don't give a valid estimate. Check waist and neck."; return; }
+  /* Tape is optional: weight alone is a valid check-in. A full set of tape numbers must still make sense. */
+  const fullTape = d.waist != null && d.neck != null && (c.sex === "male" || d.hip != null);
+  if (fullTape && d.omron == null && navy(c.sex, c.height, d.waist, d.neck, d.hip) == null) { err.textContent = "Those tape numbers don't give a valid estimate. Check waist and neck."; return; }
   if (d.omron != null && (d.omron < 3 || d.omron > 70)) { err.textContent = "The Omron reading should be between 3 and 70%."; return; }
   const btn = $("#eSave"); btn.disabled = true; btn.textContent = "Saving…"; err.textContent = "";
   try {

@@ -330,3 +330,4 @@ td .feelline{display:block;font-size:12px;color:var(--ink-2);margin-top:2px;whit
 .renovo .chead .btn.primary{background:#1683ff;border-color:#1683ff}
 .renovo .chead .pill.good{background:rgba(95,212,255,.16);color:#9FE3FF}
 .renovo .chead .pill.warn{background:rgba(253,241,214,.16);color:#FDE7B0}
+.tapehead{font-size:13px;color:var(--muted);margin-bottom:-6px}.tapehead b{color:var(--ink-2)}

@@ -14,7 +14,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="FA Tracker">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="stylesheet" href="app.css?v=20261002f">
+<link rel="stylesheet" href="app.css?v=20261002h">
 </head>
 <body>
 <header class="bar">
@@ -78,6 +78,7 @@
         <div class="field"><label for="e-sleeph">Avg sleep (hours)</label><input id="e-sleeph" type="number" inputmode="decimal" step="0.1" min="0" max="16" placeholder="e.g. 7.2"></div>
         <div class="field"><label for="e-steps">Avg daily steps</label><input id="e-steps" type="number" inputmode="numeric" step="1" min="0" max="100000" placeholder="e.g. 8500"></div>
       </div>
+      <span class="hint" id="healthNote" hidden>Filled in from Apple Health (last 7 days). You can change them.</span>
       <span class="hint">On iPhone: Health app → Sleep and Steps → tap <b>W</b> for this week's average.</span>
       <div id="glpBox" class="glp" hidden>
         <span class="slbl">GLP-1 side effects this week</span>
@@ -132,9 +133,9 @@
   </form>
 </dialog>
 
-<script src="config.js?v=20261002f"></script>
+<script src="config.js?v=20261002h"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
-<script src="library.js?v=20261002f"></script>
-<script src="app.js?v=20261002f"></script>
+<script src="library.js?v=20261002h"></script>
+<script src="app.js?v=20261002h"></script>
 </body>
 </html>

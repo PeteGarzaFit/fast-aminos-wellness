@@ -111,6 +111,7 @@ const FEEL_KEYS = ["energy", "hunger", "sleep_q", "sleep_hours", "steps", "side_
 const SIDE_EFFECTS = ["Nausea", "Vomiting", "Constipation", "Diarrhea", "Heartburn", "Bloating", "Tired", "Headache", "Dizzy", "Low appetite"];
 const fromCheckinRow = r => ({ id: r.id, clientId: r.client_id, date: r.date, weight: num(r.weight_lb), waist: num(r.waist_in), neck: num(r.neck_in), hip: num(r.hip_in), omron: num(r.omron_bf), photoFront: r.photo_front, photoSide: r.photo_side, note: r.note, energy: num(r.energy), hunger: num(r.hunger), sleepQ: num(r.sleep_q), sleepH: num(r.sleep_hours), steps: num(r.steps), sideEffects: Array.isArray(r.side_effects) ? r.side_effects : [], coachNote: r.coach_note || null, coachNoteAt: r.coach_note_at || null, enteredBy: r.entered_by, createdAt: r.created_at });
 const fromWorkoutRow = r => ({ id: r.id, clientId: r.client_id, date: r.date, dayName: r.day_name || "", entries: Array.isArray(r.entries) ? r.entries : [], note: r.note || "", enteredBy: r.entered_by, createdAt: r.created_at });
+const fromHealthRow = r => ({ date: r.date, steps: num(r.steps), sleepH: num(r.sleep_hours), weight: num(r.weight_lb), kcal: num(r.active_kcal), exMin: num(r.exercise_min), rhr: num(r.resting_hr), updatedAt: r.updated_at });
 const fromTplRow = r => ({ id: r.id, name: r.name, title: r.title || "", notes: r.notes || "", days: Array.isArray(r.days) ? r.days : [] });
 const fromPlanRow = r => r ? ({ title: r.title || "", notes: r.notes || "", days: Array.isArray(r.days) ? r.days : [], updatedAt: r.updated_at }) : null;
 /* Supabase reports a missing table/column when the October 2026 database update hasn't been run yet. */
@@ -162,6 +163,13 @@ function supaApi(sb) {
     async deletePlan(clientId) { chk(await sb.from("client_plans").delete().eq("client_id", clientId)); },
     async saveFeedback(checkinId, note) { return fromCheckinRow(chk(await sb.from("checkins").update({ coach_note: note || null }).eq("id", checkinId).select().single())); },
     async listTemplates() { return chk(await sb.from("plan_templates").select("*").order("name")).map(fromTplRow); },
+    async listHealth(clientId) { return chk(await sb.from("health_daily").select("*").eq("client_id", clientId).order("date", { ascending: false }).limit(120)).map(fromHealthRow); },
+    async upsertHealth(clientId, rows) {
+      /* Values outside the database limits are dropped (not the whole day), so one odd reading never blocks a sync. */
+      const rng = (v, lo, hi, int) => { const n = num(v); if (n == null || n < lo || n > hi) return null; return int ? Math.round(n) : n; };
+      const clean = rows.map(r => ({ client_id: clientId, date: r.date, steps: rng(r.steps, 0, 200000, true), sleep_hours: rng(r.sleepHours, 0, 24), weight_lb: rng(r.weightLb, 50, 900), active_kcal: rng(r.activeKcal, 0, 20000, true), exercise_min: rng(r.exerciseMin, 0, 1440, true), resting_hr: rng(r.restingHr, 20, 250, true), source: "apple_health" }));
+      if (clean.length) chk(await sb.from("health_daily").upsert(clean, { onConflict: "client_id,date" }));
+    },
     async listWorkouts(clientId) { return chk(await sb.from("workout_logs").select("*").eq("client_id", clientId).order("date", { ascending: false }).order("created_at", { ascending: false }).limit(300)).map(fromWorkoutRow); },
     async addWorkout(w) { return fromWorkoutRow(chk(await sb.from("workout_logs").insert({ client_id: w.clientId, date: w.date, day_name: w.dayName || null, entries: w.entries, note: w.note || null }).select().single())); },
     async deleteWorkout(id) { chk(await sb.from("workout_logs").delete().eq("id", id)); },
@@ -201,6 +209,9 @@ function demoApi(asClient) {
     return { id: "w" + date + dayIdx, clientId: "c1", date, dayName: day.name, note: "", enteredBy: "me", createdAt: date + "T17:00:00Z", entries };
   };
   let workouts = [logDay("2026-09-07", 0, 0), logDay("2026-09-08", 1, 0), logDay("2026-09-14", 0, 1), logDay("2026-09-15", 1, 1), logDay("2026-09-21", 0, 2), logDay("2026-09-22", 1, 2), logDay("2026-09-28", 0, 3), logDay("2026-09-29", 1, 3)];
+  /* Sample Apple Health days for the demo client, newest first. */
+  const health = Array.from({ length: 21 }, (_, i) => { const d = new Date(2026, 9, 1 - i); const iso = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+    return { date: iso, steps: 7000 + ((i * 1337) % 4200), sleepH: 6.4 + ((i * 7) % 12) / 10, weight: +(154.6 + i * 0.12).toFixed(1), kcal: 380 + ((i * 53) % 260), exMin: 22 + ((i * 11) % 35), rhr: 61 + (i % 4), updatedAt: "2026-10-01T07:30:00Z" }; });
   const templates = [{ id: "t1", name: "Sample 3-day plan", title: plans.c1.title, notes: plans.c1.notes, days: JSON.parse(JSON.stringify(plans.c1.days)) }];
   const photos = {};
   const wait = () => new Promise(r => setTimeout(r, 120));
@@ -218,6 +229,8 @@ function demoApi(asClient) {
     async savePlan(id, p) { await wait(); plans[id] = { ...JSON.parse(JSON.stringify(p)), updatedAt: new Date().toISOString() }; return JSON.parse(JSON.stringify(plans[id])); },
     async deletePlan(id) { await wait(); delete plans[id]; },
     async saveFeedback(eid, note) { await wait(); const e = entries.find(x => x.id === eid); e.coachNote = note || null; e.coachNoteAt = note ? new Date().toISOString() : null; return { ...e }; },
+    async listHealth(id) { await wait(); return id === "c1" ? health.slice() : []; },
+    async upsertHealth(id, rows) { await wait(); rows.forEach(r => { const i = health.findIndex(h => h.date === r.date); const h = { date: r.date, steps: r.steps ?? null, sleepH: r.sleepHours ?? null, weight: r.weightLb ?? null, kcal: r.activeKcal ?? null, exMin: r.exerciseMin ?? null, rhr: r.restingHr ?? null, updatedAt: new Date().toISOString() }; if (i >= 0) health[i] = h; else health.push(h); }); health.sort((a, b) => b.date.localeCompare(a.date)); },
     async listWorkouts(id) { await wait(); return workouts.filter(w => w.clientId === id).sort((a, b) => b.date.localeCompare(a.date) || String(b.createdAt).localeCompare(String(a.createdAt))).map(w => JSON.parse(JSON.stringify(w))); },
     async addWorkout(w) { await wait(); const n = { ...JSON.parse(JSON.stringify(w)), id: uid(), enteredBy: "me", createdAt: new Date().toISOString() }; workouts.push(n); return n; },
     async deleteWorkout(id) { await wait(); workouts = workouts.filter(w => w.id !== id); },
@@ -235,9 +248,19 @@ const DEMO_CLIENT = params.get("demo") === "client";
 const CONFIGURED = !!(CFG.supabaseUrl && CFG.supabaseAnonKey && !/PASTE/.test(CFG.supabaseAnonKey));
 const TRAINER = CFG.trainerName || "your trainer";
 let VIA_LINK = /access_token|type=(magiclink|signup|recovery|invite)/.test(location.hash) || /[?&](code|token_hash)=/.test(location.search);
-const IS_HOME_APP = window.navigator.standalone === true || (window.matchMedia && matchMedia("(display-mode: standalone)").matches);
+/* Inside the Fast Aminos iPhone app the page runs in a web view that can talk to the app. */
+const IN_APP = !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.faApp);
+/* RENOVO branding when opened from the RENOVO app (or with ?brand=renovo for previewing). */
+const RENOVO = IN_APP || new URLSearchParams(location.search).get("brand") === "renovo";
+if (RENOVO) {
+  document.documentElement.classList.add("renovo");
+  const brand = document.querySelector(".brand"); if (brand) brand.innerHTML = `<span class="rv-logo">RENOVO<span>COACH</span></span>`;
+  const sub = document.querySelector(".brand-sub"); if (sub) sub.textContent = "Renew your body. Rebuild your life.";
+  document.title = "RENOVO COACH";
+}
+const IS_HOME_APP = IN_APP || window.navigator.standalone === true || (window.matchMedia && matchMedia("(display-mode: standalone)").matches);
 let sb = null, api = null;
-const S = { me: null, isTrainer: false, clients: [], sel: null, checkins: [], plan: null, planMissing: false, templates: [], workouts: [], workoutsMissing: false, urls: {}, screen: "loading", metric: "bf", view: "front", cmpA: null, cmpB: null, overlay: false, fade: 50, authEmail: "", authStep: "email", pwMode: null, pwBack: null };
+const S = { me: null, isTrainer: false, clients: [], sel: null, checkins: [], plan: null, planMissing: false, templates: [], workouts: [], workoutsMissing: false, health: [], healthMissing: false, app: { connected: false, lastSync: null }, urls: {}, screen: "loading", metric: "bf", view: "front", cmpA: null, cmpB: null, overlay: false, fade: 50, authEmail: "", authStep: "email", pwMode: null, pwBack: null };
 const store = { get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (_) {} } };
 const client = () => S.clients.find(c => c.id === S.sel) || null;
 const canDelete = e => S.isTrainer || (S.me && e.enteredBy === S.me.id);
@@ -271,7 +294,7 @@ function render() {
   if (S.screen === "noaccess") { app.innerHTML = noAccessScreen(); return; }
   if (!S.clients.length) { app.innerHTML = welcome(); const b = $("#welcomeAdd"); if (b) b.onclick = () => openClient(null); return; }
   const c = client(); const s = series(c, S.checkins);
-  app.innerHTML = `<div class="stack">${head(c, s)}${coachCallout(c)}${tiles(c, s)}${planCard(c)}${workoutsCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div></div>`;
+  app.innerHTML = `<div class="stack">${head(c, s)}${coachCallout(c)}${tiles(c, s)}${planCard(c)}${healthCard(c)}${workoutsCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div>${RENOVO && !S.isTrainer ? shopCard() : ""}</div>`;
   wire(c, s);
 }
 
@@ -534,6 +557,8 @@ function wire(c, s) {
   const on = (sel, fn) => { const el = $(sel); if (el) el.onclick = fn; };
   on("#editClient", () => openClient(c)); on("#newEntry", () => openEntry(c)); on("#firstEntry", () => openEntry(c));
   on("#editPlan", () => openPlan(c)); on("#buildPlan", () => openPlan(c));
+  on("#connectHealth", () => { const b = $("#connectHealth"); b.disabled = true; b.textContent = "Waiting for Apple Health…"; toApp({ type: "connectHealth" }); });
+  on("#syncHealth", () => { const b = $("#syncHealth"); b.disabled = true; b.textContent = "Syncing…"; toApp({ type: "syncHealth" }); });
   $$("[data-start]").forEach(b => b.onclick = () => openWorkout(c, +b.dataset.start));
   $$("[data-delw]").forEach(btn => btn.onclick = async () => {
     if (!btn.classList.contains("armed")) { btn.classList.add("armed"); btn.textContent = "Confirm"; setTimeout(() => { if (btn.isConnected) { btn.classList.remove("armed"); btn.textContent = "Delete"; } }, 4000); return; }
@@ -573,6 +598,7 @@ async function loadCheckins() {
     S.checkins = await api.listCheckins(S.sel);
     await loadPlan();
     await loadWorkouts();
+    await loadHealth();
     const paths = S.checkins.flatMap(e => [e.photoFront, e.photoSide]).filter(p => p && !S.urls[p]);
     if (paths.length) Object.assign(S.urls, await api.photoUrls(paths));
   } catch (err) { console.error(err); toast("Couldn't load check-ins. Check your connection and reload."); }
@@ -586,6 +612,7 @@ async function loadAll() {
   const saved = store.get("fa_client");
   S.sel = S.clients.find(c => c.id === S.sel) ? S.sel : S.clients.find(c => c.id === saved) ? saved : (S.clients[0]?.id || null);
   S.screen = "app";
+  if (!S.isTrainer) toApp({ type: "ready", role: "client" });
   if (S.isTrainer) { try { S.templates = await api.listTemplates(); } catch (err) { S.templates = []; if (!isMissing(err)) console.error(err); } }
   await loadCheckins();
 }
@@ -640,7 +667,7 @@ function openEntry(c) {
   $("#eTip").textContent = S.isTrainer ? "Measure at the same time of day as the last check-in, before eating or training. Tape snug, not tight." : "Weigh and measure first thing in the morning, before eating or training. Tape snug, not tight, in the same spots each time.";
   const ph = (id, v) => { $(id).placeholder = v ? "Last: " + f1(v) : ""; };
   ph("#e-weight", last?.e.weight); ph("#e-waist", last?.e.waist); ph("#e-neck", last?.e.neck); ph("#e-hip", last?.e.hip);
-  resetFeel(c); livePreview(); $("#dlgEntry").showModal();
+  resetFeel(c); fillFromHealth(); livePreview(); $("#dlgEntry").showModal();
 }
 function livePreview() {
   const c = entryClient; if (!c) return;
@@ -727,6 +754,60 @@ function feelLine(e) {
   if (e.sleepH != null) bits.push(`${f1(e.sleepH)} h`);
   if (e.steps != null) bits.push(`${Math.round(e.steps).toLocaleString("en-US")} steps`);
   return bits.length ? `<span class="feelline">${bits.join(" · ")}</span>` : "";
+}
+
+/* Fast Aminos Wellness links inside the RENOVO app. */
+function shopCard() {
+  return `<section class="card fa"><div><div class="kicker">Fuel your progress</div><h2>Fast Aminos Wellness</h2><p class="small muted">Supplements and free tools from ${esc(TRAINER)}'s wellness shop.</p></div>
+    <div class="fa-links"><a class="btn" href="https://fast-aminos-wellness.plyamed.com/shop/supplements" target="_blank" rel="noopener">Shop supplements</a><a class="btn" href="../workouts/" target="_blank" rel="noopener">Workout library</a><a class="btn" href="../zone2/" target="_blank" rel="noopener">Zone 2 calculator</a></div></section>`;
+}
+
+/* ---------- Apple Health (via the RENOVO iPhone app) ---------- */
+function toApp(msg) { try { if (IN_APP) window.webkit.messageHandlers.faApp.postMessage(msg); } catch (_) {} }
+async function loadHealth() {
+  S.health = [];
+  try { S.health = await api.listHealth(S.sel); S.healthMissing = false; }
+  catch (err) { if (isMissing(err)) S.healthMissing = true; else console.error(err); }
+}
+/* The app calls this with { connected, lastSync, rows: [{date, steps, sleepHours, weightLb, activeKcal, exerciseMin, restingHr}], error }. */
+window.faAppHealth = async data => {
+  data = data || {};
+  S.app.connected = !!data.connected; if (data.lastSync) S.app.lastSync = data.lastSync;
+  const c = client();
+  if (Array.isArray(data.rows) && data.rows.length && c && !S.isTrainer && !S.healthMissing) {
+    const rows = data.rows.filter(r => /^\d{4}-\d{2}-\d{2}$/.test(r.date || "")).slice(0, 120);
+    try { await api.upsertHealth(c.id, rows); await loadHealth(); S.app.lastSync = new Date().toISOString(); }
+    catch (err) { console.error(err); toast("Couldn't save your Apple Health data. Try again later."); }
+  }
+  if (data.error) toast(data.error);
+  if (S.screen === "app") render();
+};
+const avg = a => { const v = a.filter(x => x != null); return v.length ? v.reduce((p, q) => p + q, 0) / v.length : null; };
+function last7(field) { const t = todayISO(); return avg(S.health.filter(h => days(h.date, t) >= 0 && days(h.date, t) < 7).map(h => h[field])); }
+function fillFromHealth() {
+  const sl = last7("sleepH"), st = last7("steps"), note = $("#healthNote");
+  if (sl != null) $("#e-sleeph").value = f1(sl);
+  if (st != null) $("#e-steps").value = Math.round(st);
+  if (note) note.hidden = sl == null && st == null;
+}
+function healthCard(c) {
+  if (S.healthMissing) return "";
+  const has = S.health.length > 0;
+  const canConnect = IN_APP && !S.isTrainer;
+  if (!has && !canConnect) return "";
+  if (!has) return `<section class="card"><div class="card-h"><h2>Apple Health</h2></div><div class="empty">Connect Apple Health and your steps, sleep and weight fill in automatically. You choose exactly what to share. <button class="btn primary sm" id="connectHealth" type="button">Connect Apple Health</button></div></section>`;
+  const t = todayISO(), wk = S.health.filter(h => days(h.date, t) >= 0 && days(h.date, t) < 7);
+  const wts = S.health.filter(h => h.weight != null);
+  const wNow = wts[0], wOld = wts.find(h => days(h.date, wNow?.date || t) >= 7);
+  const synced = S.health.reduce((m, h) => String(h.updatedAt) > m ? String(h.updatedAt) : m, "");
+  const ago = synced ? Math.max(0, Math.round((Date.now() - new Date(synced).getTime()) / 36e5)) : null;
+  const big = (lbl, v, unit, sub) => `<div class="tile"><span class="lbl">${lbl}</span><span class="big">${v ?? "–"}<small>${v != null ? unit : ""}</small></span><span class="delta">${sub || ""}</span></div>`;
+  const small = (lbl, v) => v == null ? "" : `<span><b>${v}</b> ${lbl}</span>`;
+  return `<section class="card hk"><div class="card-h"><div><div class="kicker">From Apple Health</div><h2>Last 7 days</h2></div>
+    <div class="hk-sync">${ago != null ? `<span class="muted small">Synced ${ago < 1 ? "just now" : ago < 24 ? ago + " h ago" : Math.round(ago / 24) + " days ago"}</span>` : ""}${canConnect ? `<button class="btn sm" id="syncHealth" type="button">Sync now</button>` : ""}</div></div>
+    <div class="tiles">${big("Avg steps", last7("steps") != null ? Math.round(last7("steps")).toLocaleString("en-US") : null, "/day", "")}${big("Avg sleep", last7("sleepH") != null ? f1(last7("sleepH")) : null, "h", "")}
+      ${big("Weight", wNow ? f1(wNow.weight) : null, "lb", wNow && wOld ? `${sgn(wNow.weight - wOld.weight)} lb vs a week earlier` : wNow ? fmtD(wNow.date) : "")}</div>
+    <div class="hk-more">${small("active cal/day", last7("kcal") != null ? Math.round(last7("kcal")) : null)}${small("exercise min/day", last7("exMin") != null ? Math.round(last7("exMin")) : null)}${small("resting HR", last7("rhr") != null ? Math.round(last7("rhr")) + " bpm" : null)}<span class="muted">${wk.length} of 7 days synced</span></div></section>`;
 }
 
 /* ---------- coach feedback + workout plans ---------- */

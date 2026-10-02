@@ -11,6 +11,8 @@
 --     can read their own.
 --   * Plan templates are trainer-only; clients never see them.
 --   * Workout logs: a client can log, read and delete their own; trainers see all.
+--   * Apple Health daily totals: written by the client's iPhone app; the client
+--     and trainers can read them.
 --   * Signed-out visitors (anon) can't read or write anything.
 
 create extension if not exists pgcrypto;
@@ -105,6 +107,21 @@ create table if not exists public.workout_logs (
 );
 create index if not exists workout_logs_client_date on public.workout_logs (client_id, date desc);
 create index if not exists workout_logs_entered_by on public.workout_logs (entered_by);
+
+-- One row per client per day, synced from Apple Health by the iPhone app (added October 2026).
+create table if not exists public.health_daily (
+  client_id    uuid not null references public.clients(id) on delete cascade,
+  date         date not null,
+  steps        integer check (steps between 0 and 200000),
+  sleep_hours  numeric(4,2) check (sleep_hours between 0 and 24),
+  weight_lb    numeric(5,1) check (weight_lb between 50 and 900),
+  active_kcal  integer check (active_kcal between 0 and 20000),
+  exercise_min integer check (exercise_min between 0 and 1440),
+  resting_hr   integer check (resting_hr between 20 and 250),
+  source       text check (char_length(source) <= 40),
+  updated_at   timestamptz not null default now(),
+  primary key (client_id, date)
+);
 
 -- Older setups put helpers in public; remove them there.
 drop function if exists public.is_trainer() cascade;
@@ -226,6 +243,17 @@ drop trigger if exists workout_logs_guard on public.workout_logs;
 create trigger workout_logs_guard before insert or update on public.workout_logs
   for each row execute function private.workout_logs_guard();
 
+create or replace function private.health_daily_stamp() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  new.updated_at := now();
+  if tg_op = 'UPDATE' then new.client_id := old.client_id; new.date := old.date; end if;
+  return new;
+end $$;
+drop trigger if exists health_daily_stamp on public.health_daily;
+create trigger health_daily_stamp before insert or update on public.health_daily
+  for each row execute function private.health_daily_stamp();
+
 -- Only signed-in users may run the two lookup helpers (policies need them).
 -- Nobody calls the trigger functions directly.
 revoke all on all functions in schema private from public, anon, authenticated;
@@ -236,13 +264,14 @@ grant execute on function private.my_client_ids() to authenticated;
 -- ---------- Data API access ----------
 -- New Supabase projects don't expose new tables automatically, so grant
 -- signed-in users access explicitly. Row level security below decides which rows.
-revoke all on public.trainers, public.clients, public.checkins, public.client_plans, public.plan_templates, public.workout_logs from anon;
+revoke all on public.trainers, public.clients, public.checkins, public.client_plans, public.plan_templates, public.workout_logs, public.health_daily from anon;
 grant select on public.trainers to authenticated;
 grant select, insert, update, delete on public.clients to authenticated;
 grant select, insert, update, delete on public.checkins to authenticated;
 grant select, insert, update, delete on public.client_plans to authenticated;
 grant select, insert, update, delete on public.plan_templates to authenticated;
 grant select, insert, update, delete on public.workout_logs to authenticated;
+grant select, insert, update, delete on public.health_daily to authenticated;
 
 -- ---------- row level security ----------
 alter table public.trainers enable row level security;
@@ -251,6 +280,7 @@ alter table public.checkins enable row level security;
 alter table public.client_plans enable row level security;
 alter table public.plan_templates enable row level security;
 alter table public.workout_logs enable row level security;
+alter table public.health_daily enable row level security;
 
 drop policy if exists "trainers read self" on public.trainers;
 create policy "trainers read self" on public.trainers
@@ -331,6 +361,27 @@ create policy "workouts update" on public.workout_logs
 
 drop policy if exists "workouts delete" on public.workout_logs;
 create policy "workouts delete" on public.workout_logs
+  for delete to authenticated
+  using ((select private.is_trainer()) or client_id in (select private.my_client_ids()));
+
+drop policy if exists "health read" on public.health_daily;
+create policy "health read" on public.health_daily
+  for select to authenticated
+  using ((select private.is_trainer()) or client_id in (select private.my_client_ids()));
+
+drop policy if exists "health write own" on public.health_daily;
+create policy "health write own" on public.health_daily
+  for insert to authenticated
+  with check (client_id in (select private.my_client_ids()));
+
+drop policy if exists "health update own" on public.health_daily;
+create policy "health update own" on public.health_daily
+  for update to authenticated
+  using (client_id in (select private.my_client_ids()))
+  with check (client_id in (select private.my_client_ids()));
+
+drop policy if exists "health delete" on public.health_daily;
+create policy "health delete" on public.health_daily
   for delete to authenticated
   using ((select private.is_trainer()) or client_id in (select private.my_client_ids()));
 

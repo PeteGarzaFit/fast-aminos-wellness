@@ -7,6 +7,8 @@
 --   * A client sees only their own record, check-ins and photos, matched by the
 --     email the trainer entered for them.
 --   * Only trainers can record Omron readings (gym-day calibration).
+--   * Only trainers can write workout plans and check-in feedback; each client
+--     can read their own.
 --   * Signed-out visitors (anon) can't read or write anything.
 
 create extension if not exists pgcrypto;
@@ -50,6 +52,22 @@ create table if not exists public.checkins (
 );
 create index if not exists checkins_client_date on public.checkins (client_id, date);
 create index if not exists checkins_entered_by on public.checkins (entered_by);
+
+-- Trainer feedback on a check-in (added October 2026).
+alter table public.checkins add column if not exists coach_note text check (char_length(coach_note) <= 1000);
+alter table public.checkins add column if not exists coach_note_at timestamptz;
+
+-- One workout plan per client (added October 2026).
+-- days is a list of {name, items: [{name, sets, reps, rest, note, ref}]}.
+create table if not exists public.client_plans (
+  client_id  uuid primary key references public.clients(id) on delete cascade,
+  title      text check (char_length(title) <= 120),
+  notes      text check (char_length(notes) <= 2000),
+  days       jsonb not null default '[]'::jsonb check (jsonb_typeof(days) = 'array' and pg_column_size(days) < 200000),
+  updated_by uuid default auth.uid() references auth.users(id) on delete set null,
+  updated_at timestamptz not null default now()
+);
+create index if not exists client_plans_updated_by on public.client_plans (updated_by);
 
 -- Older setups put helpers in public; remove them there.
 drop function if exists public.is_trainer() cascade;
@@ -107,18 +125,41 @@ begin
   if tg_op = 'INSERT' then
     new.entered_by := (select auth.uid());
     new.created_at := now();
-    if not private.is_trainer() then new.omron_bf := null; end if;
+    if not private.is_trainer() then
+      new.omron_bf := null; new.coach_note := null; new.coach_note_at := null;
+    elsif new.coach_note is not null then
+      new.coach_note_at := now();
+    end if;
   else
     new.entered_by := old.entered_by;
     new.client_id  := old.client_id;
     new.created_at := old.created_at;
-    if not private.is_trainer() then new.omron_bf := old.omron_bf; end if;
+    if not private.is_trainer() then
+      new.omron_bf := old.omron_bf; new.coach_note := old.coach_note; new.coach_note_at := old.coach_note_at;
+    elsif new.coach_note is distinct from old.coach_note then
+      new.coach_note_at := case when new.coach_note is null then null else now() end;
+    else
+      new.coach_note_at := old.coach_note_at;
+    end if;
   end if;
   return new;
 end $$;
 drop trigger if exists checkins_guard on public.checkins;
 create trigger checkins_guard before insert or update on public.checkins
   for each row execute function private.checkins_guard();
+
+-- Plans always record who saved them and when.
+create or replace function private.client_plans_stamp() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  new.updated_by := (select auth.uid());
+  new.updated_at := now();
+  if tg_op = 'UPDATE' then new.client_id := old.client_id; end if;
+  return new;
+end $$;
+drop trigger if exists client_plans_stamp on public.client_plans;
+create trigger client_plans_stamp before insert or update on public.client_plans
+  for each row execute function private.client_plans_stamp();
 
 -- Only signed-in users may run the two lookup helpers (policies need them).
 -- Nobody calls the trigger functions directly.
@@ -130,15 +171,17 @@ grant execute on function private.my_client_ids() to authenticated;
 -- ---------- Data API access ----------
 -- New Supabase projects don't expose new tables automatically, so grant
 -- signed-in users access explicitly. Row level security below decides which rows.
-revoke all on public.trainers, public.clients, public.checkins from anon;
+revoke all on public.trainers, public.clients, public.checkins, public.client_plans from anon;
 grant select on public.trainers to authenticated;
 grant select, insert, update, delete on public.clients to authenticated;
 grant select, insert, update, delete on public.checkins to authenticated;
+grant select, insert, update, delete on public.client_plans to authenticated;
 
 -- ---------- row level security ----------
 alter table public.trainers enable row level security;
 alter table public.clients  enable row level security;
 alter table public.checkins enable row level security;
+alter table public.client_plans enable row level security;
 
 drop policy if exists "trainers read self" on public.trainers;
 create policy "trainers read self" on public.trainers
@@ -182,6 +225,24 @@ drop policy if exists "checkins delete" on public.checkins;
 create policy "checkins delete" on public.checkins
   for delete to authenticated
   using ((select private.is_trainer()) or (entered_by = (select auth.uid()) and client_id in (select private.my_client_ids())));
+
+drop policy if exists "plans read" on public.client_plans;
+create policy "plans read" on public.client_plans
+  for select to authenticated
+  using ((select private.is_trainer()) or client_id in (select private.my_client_ids()));
+
+drop policy if exists "plans trainer insert" on public.client_plans;
+create policy "plans trainer insert" on public.client_plans
+  for insert to authenticated with check ((select private.is_trainer()));
+
+drop policy if exists "plans trainer update" on public.client_plans;
+create policy "plans trainer update" on public.client_plans
+  for update to authenticated
+  using ((select private.is_trainer())) with check ((select private.is_trainer()));
+
+drop policy if exists "plans trainer delete" on public.client_plans;
+create policy "plans trainer delete" on public.client_plans
+  for delete to authenticated using ((select private.is_trainer()));
 
 -- ---------- progress photos (private bucket) ----------
 -- Files are stored as <client id>/<random id>.jpg. Uploads never overwrite,

@@ -62,6 +62,27 @@ on conflict do nothing;
 
 Reload the tracker. You'll see **Add client**.
 
+## Update: workout plans and check-in replies (October 2026)
+Run this once to turn on workout plans and coach replies. It keeps every client,
+check-in and photo you already have.
+
+1. Supabase dashboard → **SQL Editor** → **New query**.
+2. Paste **all** of `supabase/schema.sql` and click **Run**. "Already exists, skipping"
+   notices are normal.
+3. Reload `/tracker/`. Each client now has a **Workout plan** section, and every
+   check-in has a **Reply** link.
+
+Until this runs, the tracker keeps working as before. You'll just see a note in the
+Workout plan section asking for the update.
+
+**Workout plans:** open a client → **Build plan** (or **Edit plan**). Add days, then fill a
+day from any gym or home workout on the site, or type your own exercises. Sets, reps,
+rest and a note are all editable. The client sees the plan when they sign in, with
+links to each exercise's photos on the site.
+
+**Replies:** tap **Reply** under any check-in. Your note shows under that check-in, and
+your latest reply appears at the top of the client's tracker. Only you can write replies.
+
 ## Everyday use
 1. **Add client** with their name, email, sex, date of birth and height.
 2. At the gym, do their **baseline**: weight, tape measurements, the Omron reading

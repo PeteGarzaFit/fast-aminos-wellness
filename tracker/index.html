@@ -79,8 +79,28 @@
   </form>
 </dialog>
 
+<dialog id="dlgReply">
+  <form id="fReply" novalidate>
+    <h3 id="rTitle">Reply</h3>
+    <div class="tipbox" id="rWhat"></div>
+    <div class="field"><label for="r-text">Your feedback</label><textarea id="r-text" rows="5" maxlength="1000" placeholder="e.g. Great week! Waist is down again. Keep protein at 140 g and add 5 lb to your squats."></textarea><span class="hint">Shows under this check-in, and at the top of their tracker.</span></div>
+    <div class="err" id="rErr"></div>
+    <div class="foot"><button type="button" class="btn danger" id="rClear" hidden>Remove reply</button><div class="r"><button type="button" class="btn" id="rCancel">Cancel</button><button type="submit" class="btn primary" id="rSave">Save reply</button></div></div>
+  </form>
+</dialog>
+
+<dialog id="dlgPlan" class="wide">
+  <form id="fPlan" novalidate>
+    <h3 id="plTitle">Workout plan</h3>
+    <div id="planEd" class="planed"></div>
+    <div class="err" id="plErr"></div>
+    <div class="foot"><button type="button" class="btn danger" id="plDelete" hidden>Delete plan</button><div class="r"><button type="button" class="btn" id="plCancel">Cancel</button><button type="submit" class="btn primary" id="plSave">Save plan</button></div></div>
+  </form>
+</dialog>
+
 <script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
+<script src="library.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

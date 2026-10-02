@@ -171,3 +171,47 @@ details.codealt form{margin-top:10px}
 .or{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px;margin-top:4px}
 .or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
 .or span{text-align:center}
+
+/* coach feedback */
+.coachbox{background:linear-gradient(135deg,#0B1B3F 0%,#12306E 100%);color:#fff;border-radius:18px;padding:18px 20px}
+.coachbox .kicker{color:#5FD4FF}
+.coachbox p{margin:6px 0 0;font-size:16px;line-height:1.55;white-space:pre-line}
+tr:has(+ tr.crow) td{border-bottom:0}
+tr.crow td{padding-top:0;text-align:left;white-space:normal}
+td .coach{display:block;white-space:pre-line;max-width:640px;margin-top:-4px;font-size:12.5px;color:var(--ink-2);background:var(--blue-soft);border-radius:8px;padding:6px 9px}
+td .coach b{color:var(--blue)}
+td .reply{display:block;margin-top:4px;font-size:12.5px}td .coach .reply{display:inline;margin:0 0 0 4px}
+
+/* workout plan */
+.plan .card-h h2{margin:2px 0 0}
+.plan .summary{margin-bottom:14px}
+.days{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.day{border:1px solid var(--line);border-radius:14px;padding:14px;background:var(--white);min-width:0}
+.day-h{margin-bottom:8px}
+.day-h h3{margin:2px 0 0;font-size:17px;line-height:1.25}
+.dnum{font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:800;color:var(--blue)}
+.plist{list-style:none;margin:0;padding:0;counter-reset:pl}
+.plist li{counter-increment:pl;position:relative;padding:9px 0 9px 30px;border-top:1px solid var(--grid)}
+.plist li::before{content:counter(pl);position:absolute;left:0;top:10px;width:22px;height:22px;border-radius:7px;background:var(--blue-soft);color:var(--blue);font-size:11.5px;font-weight:800;display:grid;place-items:center}
+.pname{font-weight:700;font-size:14.5px}
+.psr{font-size:13px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.pnote{font-size:12.5px;color:var(--muted);margin-top:2px}
+.plink{display:inline-block;margin-top:3px;font-size:12.5px;font-weight:700;text-decoration:none}
+
+/* plan builder */
+dialog.wide{width:min(760px,calc(100vw - 24px))}
+.planed{display:flex;flex-direction:column;gap:12px;overflow:auto}
+.ed-day{border:1px solid var(--line);border-radius:14px;padding:12px;margin:0;display:flex;flex-direction:column;gap:8px;min-width:0}
+.ed-day legend{font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:800;color:var(--blue);padding:0 6px}
+.ed-row1{display:flex;gap:8px;align-items:center}.ed-row1 input{flex:1;min-width:0}
+.ed-head,.ed-item{display:grid;grid-template-columns:minmax(0,1fr) 52px 112px 80px 30px;gap:6px;align-items:center}
+.ed-head{font-size:11px;font-weight:700;color:var(--muted);padding:0 2px}
+.ed-item{padding-bottom:8px;border-bottom:1px solid var(--grid)}
+.ed-item input{width:100%;padding:8px 9px;font-size:15px}
+.ed-item .ed-note{grid-column:1/-2;font-size:13.5px;padding:6px 9px}
+.xbtn{border:0;background:none;font-size:20px;line-height:1;color:var(--muted);cursor:pointer;border-radius:8px;height:34px}
+.xbtn:hover{color:var(--bad);background:var(--soft)}
+.ed-add{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.ed-add select{flex:1;min-width:180px;font-size:14.5px}
+.mini{display:flex;flex-direction:column;gap:2px;min-width:0}.mini span{display:none;font-size:11px;font-weight:700;color:var(--muted)}
+@media (max-width:560px){.ed-head{display:none}.mini span{display:block}.ed-item{grid-template-columns:minmax(0,.7fr) minmax(0,1.5fr) minmax(0,1fr) 30px;align-items:end}.ed-item input[data-k=name]{grid-column:1/-1}.ed-item .ed-note{grid-column:1/-1}.ed-item .xbtn{grid-column:4;grid-row:2}}
+tr.crow .coach{position:sticky;left:0;max-width:min(640px,calc(100vw - 72px))}

@@ -105,7 +105,10 @@ function summaryText(c, s, forClient) {
 const BUCKET = "progress-photos";
 const fromClientRow = r => ({ id: r.id, userId: r.user_id, email: r.email, name: r.name, sex: r.sex, dob: r.dob, height: num(r.height_in), goal: r.goal });
 const toClientRow = c => ({ email: c.email, name: c.name, sex: c.sex, dob: c.dob || null, height_in: c.height, goal: c.goal || null });
-const fromCheckinRow = r => ({ id: r.id, clientId: r.client_id, date: r.date, weight: num(r.weight_lb), waist: num(r.waist_in), neck: num(r.neck_in), hip: num(r.hip_in), omron: num(r.omron_bf), photoFront: r.photo_front, photoSide: r.photo_side, note: r.note, enteredBy: r.entered_by, createdAt: r.created_at });
+const fromCheckinRow = r => ({ id: r.id, clientId: r.client_id, date: r.date, weight: num(r.weight_lb), waist: num(r.waist_in), neck: num(r.neck_in), hip: num(r.hip_in), omron: num(r.omron_bf), photoFront: r.photo_front, photoSide: r.photo_side, note: r.note, coachNote: r.coach_note || null, coachNoteAt: r.coach_note_at || null, enteredBy: r.entered_by, createdAt: r.created_at });
+const fromPlanRow = r => r ? ({ title: r.title || "", notes: r.notes || "", days: Array.isArray(r.days) ? r.days : [], updatedAt: r.updated_at }) : null;
+/* Supabase reports a missing table/column when the October 2026 database update hasn't been run yet. */
+const isMissing = e => !!e && (e.code === "42P01" || e.code === "42703" || e.code === "PGRST205" || e.code === "PGRST204" || /does not exist|schema cache/i.test(e.message || ""));
 const toCheckinRow = e => ({ client_id: e.clientId, date: e.date, weight_lb: e.weight, waist_in: e.waist, neck_in: e.neck, hip_in: e.hip, omron_bf: e.omron, photo_front: e.photoFront, photo_side: e.photoSide, note: e.note });
 
 function supaApi(sb) {
@@ -139,7 +142,11 @@ function supaApi(sb) {
       if (!paths.length) return {};
       const d = chk(await sb.storage.from(BUCKET).createSignedUrls(paths, 6 * 3600));
       const m = {}; (d || []).forEach(x => { if (x.signedUrl) m[x.path] = x.signedUrl; }); return m;
-    }
+    },
+    async getPlan(clientId) { return fromPlanRow(chk(await sb.from("client_plans").select("*").eq("client_id", clientId).maybeSingle())); },
+    async savePlan(clientId, p) { return fromPlanRow(chk(await sb.from("client_plans").upsert({ client_id: clientId, title: p.title || null, notes: p.notes || null, days: p.days }, { onConflict: "client_id" }).select().single())); },
+    async deletePlan(clientId) { chk(await sb.from("client_plans").delete().eq("client_id", clientId)); },
+    async saveFeedback(checkinId, note) { return fromCheckinRow(chk(await sb.from("checkins").update({ coach_note: note || null }).eq("id", checkinId).select().single())); }
   };
 }
 
@@ -150,7 +157,14 @@ function demoApi(asClient) {
   ];
   const raw = [["c1","2026-06-08",162.4,31.5,13.5,39.8,30.1],["c1","2026-06-22",161.0,31.2,13.5,39.6],["c1","2026-07-06",159.8,30.9,13.4,39.4],["c1","2026-07-20",158.6,30.6,13.4,39.3,28.9],["c1","2026-08-03",157.9,30.4,13.4,39.1],["c1","2026-08-17",156.8,30.1,13.3,38.9],["c1","2026-08-31",156.2,29.9,13.3,38.8,27.4],["c1","2026-09-14",155.5,29.7,13.3,38.6],["c1","2026-09-28",155.1,29.3,13.3,38.5],
                ["c2","2026-07-15",212.6,40.5,16.2,null,26.8],["c2","2026-07-29",210.9,40.1,16.2,null],["c2","2026-08-05",210.2,38.8,16.1,null],["c2","2026-08-19",208.4,39.6,16.2,null]];
-  let entries = raw.map((r, i) => ({ id: "e" + i, clientId: r[0], date: r[1], weight: r[2], waist: r[3], neck: r[4], hip: r[5], omron: r[6] ?? null, note: i === 0 ? "Baseline at the gym" : null, enteredBy: (r[6] != null || !asClient) ? "trainer" : "me", createdAt: String(i).padStart(4, "0") }));
+  const fb = { 7: "Waist keeps trending down and lean mass is holding. Exactly what we want. Keep protein up and stay consistent with the 45/30.", 8: "Another solid week! You're down 2.2 inches on the waist since June. Let's add 5 lb to your hip thrusts this week." };
+  let entries = raw.map((r, i) => ({ id: "e" + i, clientId: r[0], date: r[1], weight: r[2], waist: r[3], neck: r[4], hip: r[5], omron: r[6] ?? null, note: i === 0 ? "Baseline at the gym" : null, coachNote: fb[i] || null, coachNoteAt: fb[i] ? r[1] + "T18:00:00Z" : null, enteredBy: (r[6] != null || !asClient) ? "trainer" : "me", createdAt: String(i).padStart(4, "0") }));
+  const L = window.WORKOUT_LIBRARY || [], li = id => (L.find(w => w.id === id) || { items: [], ref: "" });
+  const fromLib = (id, n) => li(id).items.slice(0, n || 99).map(x => ({ ...x, note: "", ref: li(id).ref }));
+  const plans = { c1: { title: "Phase 1: Build the base", notes: "3 strength days a week, then 30 minutes of Zone 2 right after each one. Rest at least one day between sessions.", days: [
+    { name: "Lower body", items: [...fromLib("gym/glutes", 3), { name: "Incline treadmill walk", sets: "1", reps: "30 min", rest: "", note: "Zone 2: you can talk, but not sing.", ref: "" }] },
+    { name: "Upper body", items: fromLib("gym/back", 3).concat(fromLib("gym/chest", 2)) },
+    { name: "Full body at home", items: fromLib("home/full-body") } ], updatedAt: "2026-09-28T18:00:00Z" } };
   const photos = {};
   const wait = () => new Promise(r => setTimeout(r, 120));
   return {
@@ -162,7 +176,11 @@ function demoApi(asClient) {
     async addCheckin(e) { await wait(); const n = { ...e, id: uid(), enteredBy: "me", createdAt: new Date().toISOString(), omron: asClient ? null : e.omron }; entries.push(n); return n; },
     async deleteCheckin(e) { await wait(); entries = entries.filter(x => x.id !== e.id); },
     async uploadPhoto(clientId, blob) { const p = clientId + "/" + uid() + ".jpg"; photos[p] = URL.createObjectURL(blob); return p; },
-    async photoUrls(paths) { const m = {}; paths.forEach(p => { if (photos[p]) m[p] = photos[p]; }); return m; }
+    async photoUrls(paths) { const m = {}; paths.forEach(p => { if (photos[p]) m[p] = photos[p]; }); return m; },
+    async getPlan(id) { await wait(); return plans[id] ? JSON.parse(JSON.stringify(plans[id])) : null; },
+    async savePlan(id, p) { await wait(); plans[id] = { ...JSON.parse(JSON.stringify(p)), updatedAt: new Date().toISOString() }; return JSON.parse(JSON.stringify(plans[id])); },
+    async deletePlan(id) { await wait(); delete plans[id]; },
+    async saveFeedback(eid, note) { await wait(); const e = entries.find(x => x.id === eid); e.coachNote = note || null; e.coachNoteAt = note ? new Date().toISOString() : null; return { ...e }; }
   };
 }
 
@@ -176,7 +194,7 @@ const TRAINER = CFG.trainerName || "your trainer";
 let VIA_LINK = /access_token|type=(magiclink|signup|recovery|invite)/.test(location.hash) || /[?&](code|token_hash)=/.test(location.search);
 const IS_HOME_APP = window.navigator.standalone === true || (window.matchMedia && matchMedia("(display-mode: standalone)").matches);
 let sb = null, api = null;
-const S = { me: null, isTrainer: false, clients: [], sel: null, checkins: [], urls: {}, screen: "loading", metric: "bf", view: "front", cmpA: null, cmpB: null, overlay: false, fade: 50, authEmail: "", authStep: "email", pwMode: null, pwBack: null };
+const S = { me: null, isTrainer: false, clients: [], sel: null, checkins: [], plan: null, planMissing: false, urls: {}, screen: "loading", metric: "bf", view: "front", cmpA: null, cmpB: null, overlay: false, fade: 50, authEmail: "", authStep: "email", pwMode: null, pwBack: null };
 const store = { get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (_) {} } };
 const client = () => S.clients.find(c => c.id === S.sel) || null;
 const canDelete = e => S.isTrainer || (S.me && e.enteredBy === S.me.id);
@@ -210,7 +228,7 @@ function render() {
   if (S.screen === "noaccess") { app.innerHTML = noAccessScreen(); return; }
   if (!S.clients.length) { app.innerHTML = welcome(); const b = $("#welcomeAdd"); if (b) b.onclick = () => openClient(null); return; }
   const c = client(); const s = series(c, S.checkins);
-  app.innerHTML = `<div class="stack">${head(c, s)}${tiles(c, s)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div></div>`;
+  app.innerHTML = `<div class="stack">${head(c, s)}${coachCallout(c)}${tiles(c, s)}${planCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div></div>`;
   wire(c, s);
 }
 
@@ -434,10 +452,10 @@ function logCard(c, s) {
   if (!s.rows.length) return `<section class="card"><div class="card-h"><h2>Check-in log</h2></div><div class="empty">Check-ins will list here, newest first.</div></section>`;
   const fem = c.sex !== "male";
   const tr = [...s.rows].reverse().map(r => { const e = r.e;
-    return `<tr><td>${fmtD(e.date, true)}${e.omron != null ? ` <span class="tag">GYM</span>` : ""}${r.flags.map(f => `<span class="flag">${ICON_WARN}<span>${esc(f)}</span></span>`).join("")}${e.note ? `<span class="note">${esc(e.note)}</span>` : ""}</td>
+    return `<tr><td>${fmtD(e.date, true)}${e.omron != null ? ` <span class="tag">GYM</span>` : ""}${r.flags.map(f => `<span class="flag">${ICON_WARN}<span>${esc(f)}</span></span>`).join("")}${e.note ? `<span class="note">${esc(e.note)}</span>` : ""}${S.isTrainer && !S.planMissing && !e.coachNote ? `<button type="button" class="linkbtn reply" data-reply="${esc(e.id)}">Reply</button>` : ""}</td>
     <td>${f1(e.weight)}</td><td>${f1(e.waist)}</td><td>${f1(e.neck)}</td>${fem ? `<td>${f1(e.hip)}</td>` : ""}
     <td>${f1(r.tape)}</td><td>${e.omron != null ? f1(e.omron) : "–"}</td><td class="bfcell">${f1(r.bf)}</td><td>${f1(r.lean)}</td>
-    <td>${canDelete(e) ? `<button type="button" class="btn ghost sm danger" data-del="${esc(e.id)}">Delete</button>` : ""}</td></tr>`; }).join("");
+    <td>${canDelete(e) ? `<button type="button" class="btn ghost sm danger" data-del="${esc(e.id)}">Delete</button>` : ""}</td></tr>${e.coachNote ? `<tr class="crow"><td colspan="${fem ? 10 : 9}"><div class="coach"><b>${esc(TRAINER)}:</b> ${esc(e.coachNote)}${S.isTrainer && !S.planMissing ? ` <button type="button" class="linkbtn reply" data-reply="${esc(e.id)}">Edit</button>` : ""}</div></td></tr>` : ""}`; }).join("");
   return `<section class="card"><div class="card-h"><h2>Check-in log</h2><span class="muted small">${s.rows.length} check-in${s.rows.length > 1 ? "s" : ""}</span></div>
   <div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Wt lb</th><th>Waist</th><th>Neck</th>${fem ? "<th>Hips</th>" : ""}<th>Tape %</th><th>Omron %</th><th>Body fat %</th><th>Lean lb</th><th><span hidden>Actions</span></th></tr></thead><tbody>${tr}</tbody></table></div></section>`;
 }
@@ -472,6 +490,8 @@ function summaryCard(c, s) {
 function wire(c, s) {
   const on = (sel, fn) => { const el = $(sel); if (el) el.onclick = fn; };
   on("#editClient", () => openClient(c)); on("#newEntry", () => openEntry(c)); on("#firstEntry", () => openEntry(c));
+  on("#editPlan", () => openPlan(c)); on("#buildPlan", () => openPlan(c));
+  $$("[data-reply]").forEach(b => b.onclick = () => openReply(c, S.checkins.find(x => x.id === b.dataset.reply)));
   $$("[data-metric]").forEach(b => b.onclick = () => { S.metric = b.dataset.metric; render(); });
   $$("[data-view]").forEach(b => b.onclick = () => { S.view = b.dataset.view; render(); });
   $$("[data-ov]").forEach(b => b.onclick = () => { S.overlay = b.dataset.ov === "1"; render(); });
@@ -501,6 +521,7 @@ async function loadCheckins() {
   if (!S.sel) { S.checkins = []; render(); return; }
   try {
     S.checkins = await api.listCheckins(S.sel);
+    await loadPlan();
     const paths = S.checkins.flatMap(e => [e.photoFront, e.photoSide]).filter(p => p && !S.urls[p]);
     if (paths.length) Object.assign(S.urls, await api.photoUrls(paths));
   } catch (err) { console.error(err); toast("Couldn't load check-ins. Check your connection and reload."); }
@@ -619,6 +640,134 @@ $("#fEntry").onsubmit = async ev => {
     err.textContent = e && /size|large/i.test(e.message || "") ? "That photo is too large. Try a smaller one." : "Couldn't save. Check your connection and try again.";
   }
   btn.disabled = false; btn.textContent = "Save check-in";
+};
+
+/* ---------- coach feedback + workout plans ---------- */
+async function loadPlan() {
+  S.plan = null;
+  try { S.plan = await api.getPlan(S.sel); S.planMissing = false; }
+  catch (err) { if (isMissing(err)) S.planMissing = true; else console.error(err); }
+}
+
+/* The client sees the trainer's most recent reply at the top of their page. */
+function coachCallout(c) {
+  if (S.isTrainer) return "";
+  const e = [...S.checkins].filter(x => x.coachNote).sort((a, b) => String(a.coachNoteAt || a.date).localeCompare(String(b.coachNoteAt || b.date))).pop();
+  if (!e) return "";
+  return `<section class="coachbox"><div class="kicker">From ${esc(TRAINER)} · on your ${fmtD(e.date)} check-in</div><p>${esc(e.coachNote)}</p></section>`;
+}
+
+const refUrl = ref => /^[a-z-]+(\/home)?$/.test(ref || "") ? `../workouts/${ref}/` : "";
+function planDays(p) {
+  return `<div class="days">${p.days.map((d, i) => `<div class="day"><div class="day-h"><span class="dnum">Day ${i + 1}</span><h3>${esc(d.name || "Workout")}</h3></div>
+    <ol class="plist">${(d.items || []).map(x => { const u = refUrl(x.ref);
+      const sr = [x.sets ? `${esc(x.sets)} × ${esc(x.reps || "")}` : esc(x.reps || ""), x.rest ? `rest ${esc(x.rest)}` : ""].filter(Boolean).join(" · ");
+      return `<li><div class="pname">${esc(x.name)}</div>${sr ? `<div class="psr">${sr}</div>` : ""}${x.note ? `<div class="pnote">${esc(x.note)}</div>` : ""}${u ? `<a class="plink" href="${u}" target="_blank" rel="noopener">Form &amp; photos →</a>` : ""}</li>`; }).join("")}</ol></div>`).join("")}</div>`;
+}
+function planCard(c) {
+  if (S.planMissing) return S.isTrainer ? `<section class="card"><div class="card-h"><h2>Workout plan</h2></div><div class="empty">Workout plans and check-in replies need a one-time database update. Run <code>supabase/schema.sql</code> again in the Supabase SQL Editor, then reload. Steps are in <code>tracker/SETUP.md</code>.</div></section>` : "";
+  const p = S.plan;
+  if (!p || !p.days.length) {
+    return S.isTrainer ? `<section class="card"><div class="card-h"><h2>Workout plan</h2></div><div class="empty">No plan for ${esc(firstName(c.name))} yet. Build one from your gym and home workouts, or write your own. <button class="btn primary sm" id="buildPlan" type="button">Build plan</button></div></section>` : "";
+  }
+  return `<section class="card plan"><div class="card-h"><div><div class="kicker">${S.isTrainer ? "Workout plan" : `Your plan from ${esc(TRAINER)}`}</div><h2>${esc(p.title || "Workout plan")}</h2></div>
+    ${S.isTrainer ? `<button class="btn" id="editPlan" type="button">Edit plan</button>` : (p.updatedAt ? `<span class="muted small">Updated ${fmtD(String(p.updatedAt).slice(0, 10), true)}</span>` : "")}</div>
+    ${p.notes ? `<p class="summary">${esc(p.notes)}</p>` : ""}${planDays(p)}</section>`;
+}
+
+/* Reply dialog (trainer). */
+let replyTo = null;
+function openReply(c, e) {
+  if (!e) return; replyTo = e;
+  $("#rTitle").textContent = `Reply to ${firstName(c.name)}`;
+  $("#rWhat").textContent = `${fmtD(e.date, true)} check-in · ${f1(e.weight)} lb${e.note ? ` · "${e.note}"` : ""}`;
+  $("#r-text").value = e.coachNote || ""; $("#rErr").textContent = "";
+  $("#rClear").hidden = !e.coachNote;
+  $("#dlgReply").showModal(); setTimeout(() => $("#r-text").focus(), 50);
+}
+async function saveReply(text) {
+  const btn = $("#rSave"); btn.disabled = true; $("#rErr").textContent = "";
+  try {
+    const upd = await api.saveFeedback(replyTo.id, text);
+    const e = S.checkins.find(x => x.id === replyTo.id); if (e) { e.coachNote = upd.coachNote; e.coachNoteAt = upd.coachNoteAt; }
+    $("#dlgReply").close(); toast(text ? `Reply saved. ${firstName(client()?.name)} will see it in their tracker.` : "Reply removed"); render();
+  } catch (err) { console.error(err); $("#rErr").textContent = isMissing(err) ? "Run the database update in tracker/SETUP.md first." : "Couldn't save. Check your connection and try again."; }
+  btn.disabled = false;
+}
+$("#fReply").onsubmit = ev => { ev.preventDefault(); const t = $("#r-text").value.trim(); if (t.length > 1000) { $("#rErr").textContent = "Keep it under 1,000 characters."; return; } saveReply(t); };
+$("#rCancel").onclick = () => $("#dlgReply").close();
+$("#rClear").onclick = () => saveReply("");
+
+/* Plan builder (trainer). */
+const LIB = window.WORKOUT_LIBRARY || [];
+let draft = null, planClient = null;
+const blankItem = () => ({ name: "", sets: "3", reps: "10", rest: "60 sec", note: "", ref: "" });
+function openPlan(c) {
+  planClient = c;
+  draft = S.plan && S.plan.days.length ? JSON.parse(JSON.stringify({ title: S.plan.title, notes: S.plan.notes, days: S.plan.days })) : { title: "", notes: "", days: [{ name: "", items: [] }] };
+  $("#plTitle").textContent = `Workout plan for ${firstName(c.name)}`;
+  $("#plErr").textContent = ""; $("#plDelete").hidden = !(S.plan && S.plan.days.length);
+  const del = $("#plDelete"); del.classList.remove("armed"); del.textContent = "Delete plan"; del.disabled = false;
+  drawPlanEditor(); $("#dlgPlan").showModal();
+}
+function drawPlanEditor() {
+  const libOpts = `<option value="">Add a workout from your site…</option>` + ["Gym", "Home"].map(m => `<optgroup label="${m} workouts">${LIB.filter(w => w.label.endsWith(`(${m})`)).map(w => `<option value="${esc(w.id)}">${esc(w.label)}</option>`).join("")}</optgroup>`).join("");
+  $("#planEd").innerHTML = `
+    <div class="field"><label for="pl-title">Plan name</label><input id="pl-title" type="text" maxlength="120" data-top="title" value="${esc(draft.title)}" placeholder="e.g. Phase 1: Build the base"></div>
+    <div class="field"><label for="pl-notes">Notes for ${esc(firstName(planClient.name))}</label><textarea id="pl-notes" rows="2" maxlength="2000" data-top="notes" placeholder="e.g. 3 days a week. Walk 30 minutes in Zone 2 after each session.">${esc(draft.notes)}</textarea></div>
+    ${draft.days.map((d, di) => `<fieldset class="ed-day"><legend>Day ${di + 1}</legend>
+      <div class="ed-row1"><input type="text" maxlength="80" aria-label="Day ${di + 1} name" data-d="${di}" data-k="name" value="${esc(d.name)}" placeholder="Name, e.g. Lower body"><button type="button" class="btn ghost sm danger" data-rmday="${di}" aria-label="Remove day ${di + 1}">Remove day</button></div>
+      ${d.items.length ? `<div class="ed-head" aria-hidden="true"><span>Exercise</span><span>Sets</span><span>Reps</span><span>Rest</span><span></span></div>` : ""}
+      ${d.items.map((x, ii) => `<div class="ed-item">
+        <input type="text" maxlength="80" aria-label="Exercise name" data-d="${di}" data-i="${ii}" data-k="name" value="${esc(x.name)}" placeholder="Exercise">
+        <label class="mini"><span>Sets</span><input type="text" maxlength="12" aria-label="Sets" data-d="${di}" data-i="${ii}" data-k="sets" value="${esc(x.sets)}"></label>
+        <label class="mini"><span>Reps</span><input type="text" maxlength="24" aria-label="Reps" data-d="${di}" data-i="${ii}" data-k="reps" value="${esc(x.reps)}"></label>
+        <label class="mini"><span>Rest</span><input type="text" maxlength="16" aria-label="Rest" data-d="${di}" data-i="${ii}" data-k="rest" value="${esc(x.rest)}"></label>
+        <button type="button" class="xbtn" data-rm="${di}:${ii}" aria-label="Remove ${esc(x.name || "exercise")}">×</button>
+        <input class="ed-note" type="text" maxlength="200" aria-label="Note for ${esc(x.name || "exercise")}" data-d="${di}" data-i="${ii}" data-k="note" value="${esc(x.note)}" placeholder="Note (optional), e.g. Use the 25s">
+      </div>`).join("")}
+      <div class="ed-add"><button type="button" class="btn sm" data-additem="${di}">+ Exercise</button><select data-lib="${di}" aria-label="Add a workout to day ${di + 1}">${libOpts}</select></div>
+    </fieldset>`).join("")}
+    <button type="button" class="btn" id="plAddDay"${draft.days.length >= 7 ? " disabled" : ""}>+ Add a day</button>`;
+}
+$("#planEd").addEventListener("input", ev => {
+  const t = ev.target;
+  if (t.dataset.top) draft[t.dataset.top] = t.value;
+  else if (t.dataset.k && t.dataset.d != null) { const d = draft.days[+t.dataset.d]; if (t.dataset.i != null) d.items[+t.dataset.i][t.dataset.k] = t.value; else d[t.dataset.k] = t.value; }
+});
+$("#planEd").addEventListener("change", ev => {
+  const t = ev.target; if (t.dataset.lib == null || !t.value) return;
+  const w = LIB.find(x => x.id === t.value); if (!w) return;
+  const d = draft.days[+t.dataset.lib];
+  d.items.push(...w.items.map(x => ({ ...x, note: "", ref: w.ref })));
+  if (!d.name) d.name = w.label;
+  drawPlanEditor();
+});
+$("#planEd").addEventListener("click", ev => {
+  const b = ev.target.closest("button"); if (!b) return;
+  if (b.id === "plAddDay") { draft.days.push({ name: "", items: [] }); drawPlanEditor(); }
+  else if (b.dataset.additem != null) { draft.days[+b.dataset.additem].items.push(blankItem()); drawPlanEditor(); const ins = $$(`[data-d="${b.dataset.additem}"][data-k="name"][data-i]`); ins[ins.length - 1]?.focus(); }
+  else if (b.dataset.rm) { const [di, ii] = b.dataset.rm.split(":").map(Number); draft.days[di].items.splice(ii, 1); drawPlanEditor(); }
+  else if (b.dataset.rmday != null) { draft.days.splice(+b.dataset.rmday, 1); if (!draft.days.length) draft.days.push({ name: "", items: [] }); drawPlanEditor(); }
+});
+$("#plCancel").onclick = () => $("#dlgPlan").close();
+$("#plDelete").onclick = async () => {
+  const b = $("#plDelete");
+  if (!b.classList.contains("armed")) { b.classList.add("armed"); b.textContent = "Delete this plan"; return; }
+  b.disabled = true;
+  try { await api.deletePlan(planClient.id); S.plan = null; $("#dlgPlan").close(); toast("Plan deleted"); render(); }
+  catch (e) { $("#plErr").textContent = "Couldn't delete. Try again."; b.disabled = false; }
+};
+$("#fPlan").onsubmit = async ev => {
+  ev.preventDefault();
+  const err = $("#plErr");
+  const days = draft.days.map(d => ({ name: d.name.trim(), items: d.items.map(x => ({ name: x.name.trim(), sets: String(x.sets || "").trim(), reps: String(x.reps || "").trim(), rest: String(x.rest || "").trim(), note: String(x.note || "").trim(), ref: x.ref || "" })).filter(x => x.name) })).filter(d => d.items.length);
+  if (!days.length) { err.textContent = "Add at least one exercise."; return; }
+  const p = { title: draft.title.trim(), notes: draft.notes.trim(), days };
+  const btn = $("#plSave"); btn.disabled = true; btn.textContent = "Saving…"; err.textContent = "";
+  try { S.plan = await api.savePlan(planClient.id, p); $("#dlgPlan").close(); toast(`Plan saved. ${firstName(planClient.name)} will see it next time they open the tracker.`); render(); }
+  catch (e) { console.error(e); err.textContent = isMissing(e) ? "Run the database update in tracker/SETUP.md first." : "Couldn't save. Check your connection and try again."; }
+  btn.disabled = false; btn.textContent = "Save plan";
 };
 
 /* ---------- auth + boot ---------- */

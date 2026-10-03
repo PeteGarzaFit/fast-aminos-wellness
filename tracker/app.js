@@ -1334,8 +1334,8 @@ function habitsCard(c) {
   const wk = habitWeek(c), rows = hs.map(h => {
     const v = habitDone(c, h, t), st = habitStreak(c, h), prog = habitProgress(c, h);
     const dots = daysBack(7).reverse().map(d => { const x = habitDone(c, h, d); return `<i class="${x === null ? "na" : x ? "on" : ""}"></i>`; }).join("");
-    const btn = h.auto ? `<span class="hk${v ? " on" : v === null ? " na" : ""}" aria-label="${v ? "Done" : "Not yet"}">${v ? "✓" : ""}</span>`
-      : `<button type="button" class="hk${v ? " on" : ""}" data-habit="${esc(h.id)}" aria-pressed="${!!v}" aria-label="${esc(h.label)}"${S.isTrainer ? " disabled" : ""}>${v ? "✓" : ""}</button>`;
+    const btn = h.auto ? `<span class="hcheck${v ? " on" : v === null ? " na" : ""}" aria-label="${v ? "Done" : "Not yet"}">${v ? "✓" : ""}</span>`
+      : `<button type="button" class="hcheck${v ? " on" : ""}" data-habit="${esc(h.id)}" aria-pressed="${!!v}" aria-label="${esc(h.label)}"${S.isTrainer ? " disabled" : ""}>${v ? "✓" : ""}</button>`;
     return `<li><span class="hicon">${h.icon}</span><div class="htxt"><b>${esc(h.label)}</b><span>${prog ? esc(prog) + " · " : ""}${h.auto ? "auto" : "tap to check"}${st >= 2 ? ` · 🔥 ${st} days` : ""}</span><span class="hdots" aria-hidden="true">${dots}</span></div>${btn}</li>`;
   }).join("");
   return `<section class="card habits"><div class="card-h"><div><div class="kicker">Habits${wk != null ? ` · ${Math.round(wk * 100)}% this week` : ""}</div><h2>Today's habits</h2></div><button class="btn sm ghost" type="button" id="editHabits">Edit</button></div><ul class="hlist">${rows}</ul></section>`;

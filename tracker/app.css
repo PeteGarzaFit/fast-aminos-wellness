@@ -647,3 +647,9 @@ span.hcheck{cursor:default}
 .wk-key span{display:flex;align-items:center;gap:5px}
 .wk-key i{width:9px;height:9px;border-radius:50%;display:inline-block}
 .k-plan{background:var(--blue)}.k-od{background:#F59E0B}.k-miss{border:2px solid var(--bad);width:7px!important;height:7px!important}
+
+/* iPhone date boxes: stop the built-in minimum width from spilling into the next column */
+input[type=date]{-webkit-appearance:none;appearance:none;display:block;width:100%;max-width:100%;min-width:0;box-sizing:border-box;line-height:1.25;min-height:44px;color:var(--ink)}
+input[type=date]::-webkit-date-and-time-value{text-align:left;margin:0}
+input[type=date]::-webkit-calendar-picker-indicator{margin-left:auto}
+.field{min-width:0}

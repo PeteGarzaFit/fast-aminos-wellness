@@ -1182,8 +1182,9 @@ function tick(final) {
     audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === "suspended") audioCtx.resume();
     const o = audioCtx.createOscillator(), g = audioCtx.createGain(), t = audioCtx.currentTime;
-    o.frequency.value = final ? 880 : 660; o.connect(g); g.connect(audioCtx.destination);
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.3, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12); o.start(t); o.stop(t + 0.14);
+    /* Phone speakers are loudest around 1–2 kHz, so the ticks sit there and last long enough to hear in a loud gym. */
+    o.type = "square"; o.frequency.value = final ? 1400 : 1100; o.connect(g); g.connect(audioCtx.destination);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.25, t + 0.01); g.gain.setValueAtTime(0.25, t + 0.14); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2); o.start(t); o.stop(t + 0.22);
   } catch (_) {}
 }
 function beep() {

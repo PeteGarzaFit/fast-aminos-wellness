@@ -1032,7 +1032,7 @@ function drawPlanEditor() {
       ${d.items.map((x, ii) => `<div class="ed-item">
         <input type="text" maxlength="80" aria-label="Exercise name" data-d="${di}" data-i="${ii}" data-k="name" value="${esc(x.name)}" placeholder="Exercise">
         <label class="mini"><span>Sets</span><input type="text" maxlength="12" aria-label="Sets" data-d="${di}" data-i="${ii}" data-k="sets" value="${esc(x.sets)}"></label>
-        <label class="mini"><span>Reps</span><input type="text" maxlength="24" aria-label="Reps" data-d="${di}" data-i="${ii}" data-k="reps" value="${esc(x.reps)}"></label>
+        <label class="mini"><span>Reps</span><input type="text" maxlength="24" aria-label="Reps" data-d="${di}" data-i="${ii}" enterkeyhint="next" data-k="reps" value="${esc(x.reps)}"></label>
         <label class="mini"><span>Rest</span><input type="text" maxlength="16" aria-label="Rest" data-d="${di}" data-i="${ii}" data-k="rest" value="${esc(x.rest)}"></label>
         <button type="button" class="xbtn" data-rm="${di}:${ii}" aria-label="Remove ${esc(x.name || "exercise")}">×</button>
         <input class="ed-note" type="text" maxlength="200" aria-label="Note for ${esc(x.name || "exercise")}" data-d="${di}" data-i="${ii}" data-k="note" value="${esc(x.note)}" placeholder="Note (optional), e.g. Use the 25s">
@@ -1127,7 +1127,7 @@ function drawWorkout() {
     if (e.timed) return `<div class="wex">${head}${x.note ? `<div class="pnote">${esc(x.note)}</div>` : ""}<label class="wdone"><input type="checkbox" data-done="${ei}"${e.done ? " checked" : ""}> Done</label></div>`;
     const ph = prev ? prev.e.sets.filter(st => st.lb != null).map(st => st.lb) : [];
     const rows = e.sets.map((st, si) => `<div class="wset"><span class="snum">Set ${si + 1}</span>
-      <label class="wf"><input type="number" inputmode="decimal" step="2.5" min="0" max="2000" data-e="${ei}" data-s="${si}" data-k="lb" value="${esc(st.lb)}" placeholder="${ph[si] ?? ph[ph.length - 1] ?? ""}" aria-label="${esc(e.name)} set ${si + 1} weight"><span>lb</span></label>
+      <label class="wf"><input type="number" inputmode="decimal" step="2.5" min="0" max="2000" data-e="${ei}" data-s="${si}" enterkeyhint="next" data-k="lb" value="${esc(st.lb)}" placeholder="${ph[si] ?? ph[ph.length - 1] ?? ""}" aria-label="${esc(e.name)} set ${si + 1} weight"><span>lb</span></label>
       <label class="wf"><input type="number" inputmode="numeric" step="1" min="0" max="200" data-e="${ei}" data-s="${si}" data-k="reps" value="${esc(st.reps)}" placeholder="${topRep(x) ?? ""}" aria-label="${esc(e.name)} set ${si + 1} reps"><span>reps</span></label></div>`).join("");
     return `<div class="wex">${head}${x.note ? `<div class="pnote">${esc(x.note)}</div>` : ""}${last}${progressHint(x, prev)}${rows}<button type="button" class="linkbtn addset" data-addset="${ei}">+ Add a set</button></div>`;
   }).join("");
@@ -1145,6 +1145,22 @@ $("#wList").addEventListener("change", ev => {
   else { const n = wDraft.entries.slice(ei + 1).find(x => !x.timed); next = n ? `Next: ${n.name}` : "Last set done. Finish strong!"; }
   if (si + 1 >= e.sets.length && !wDraft.entries.slice(ei + 1).some(x => !x.timed)) { stopRest(); return; }
   startRest(restSecs(e.plan.rest), next);
+});
+/* Tapping ✓ on the keyboard after a weight jumps to that set's reps; after reps, to the next empty box. */
+$("#wList").addEventListener("focusout", ev => {
+  const t = ev.target;
+  if (!t.dataset || !t.dataset.k || t.value === "" || (ev.relatedTarget && ev.relatedTarget.matches && ev.relatedTarget.matches("[data-k]"))) return;
+  const all = $$("#wList input[data-k]"), i = all.indexOf(t);
+  const next = all.slice(i + 1).find(x => x.value === "");
+  if (!next) return;
+  next.focus({ preventScroll: true });
+  next.scrollIntoView({ block: "center", behavior: "smooth" });
+});
+$("#wList").addEventListener("keydown", ev => {
+  if (ev.key !== "Enter" || !ev.target.dataset || !ev.target.dataset.k) return;
+  ev.preventDefault();
+  const all = $$("#wList input[data-k]"), next = all.slice(all.indexOf(ev.target) + 1).find(x => x.value === "");
+  if (next) { next.focus({ preventScroll: true }); next.scrollIntoView({ block: "center", behavior: "smooth" }); } else ev.target.blur();
 });
 $("#wList").addEventListener("click", ev => { const r = ev.target.closest("[data-rest]"); if (r) { const e = wDraft.entries[+r.dataset.rest]; startRest(restSecs(e.plan.rest), `Rest: ${e.name}`); } });
 $("#wList").addEventListener("click", ev => { const b = ev.target.closest("[data-addset]"); if (!b) return; const e = wDraft.entries[+b.dataset.addset]; if (e.sets.length < 12) { e.sets.push({ lb: "", reps: "" }); drawWorkout(); } });

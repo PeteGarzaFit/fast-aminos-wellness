@@ -401,7 +401,7 @@ function render() {
   }
   if (!S.clients.length) { app.innerHTML = welcome(); const b = $("#welcomeAdd"); if (b) b.onclick = () => openClient(null); return; }
   const c = client(); const s = series(c, S.checkins);
-  app.innerHTML = `<div class="stack">${head(c, s)}${weekStrip(c)}${todayCard(c)}${scoreCard(c)}${msgBanner(c)}${coachCallout(c)}${todayWorkoutCard(c)}${habitsCard(c)}${healthCard(c)}${waterCard(c)}${fuelCard(c)}${trendsCard()}${tiles(c, s)}${s.rows.length ? calNote(c, s) : ""}${planCard(c)}${strengthCard()}${badgesCard(c)}${workoutsCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div>${RENOVO && !S.isTrainer ? shopCard() : ""}${acctFoot()}</div>`;
+  app.innerHTML = `<div class="stack">${head(c, s)}${weekStrip(c)}${todayCard(c)}${scoreCard(c)}${msgBanner(c)}${coachCallout(c)}${todayWorkoutCard(c)}${odCard(c)}${habitsCard(c)}${healthCard(c)}${waterCard(c)}${fuelCard(c)}${trendsCard()}${tiles(c, s)}${s.rows.length ? calNote(c, s) : ""}${planCard(c)}${strengthCard()}${badgesCard(c)}${workoutsCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div>${RENOVO && !S.isTrainer ? shopCard() : ""}${acctFoot()}</div>`;
   wire(c, s);
   const da = $("#delAcct"); if (da) da.onclick = openDeleteAccount;
   drawTabBar(c);
@@ -719,6 +719,7 @@ function wire(c, s) {
   on("#syncHealth", () => { const b = $("#syncHealth"); b.disabled = true; b.textContent = "Syncing…"; toApp({ type: "syncHealth" }); });
   $$("[data-start]").forEach(b => b.onclick = () => openWorkout(c, +b.dataset.start));
   $$("[data-wk]").forEach(b => b.onclick = () => weekTap(c, b.dataset.wk));
+  $$("[data-od]").forEach(b => b.onclick = () => openOD(c, b.dataset.od || null));
   $$("[data-delw]").forEach(btn => btn.onclick = async () => {
     if (!btn.classList.contains("armed")) { btn.classList.add("armed"); btn.textContent = "Confirm"; setTimeout(() => { if (btn.isConnected) { btn.classList.remove("armed"); btn.textContent = "Delete"; } }, 4000); return; }
     btn.disabled = true;
@@ -1195,11 +1196,61 @@ function weekTap(c, iso) {
   openWorkout(c, x.i);
 }
 
+/* ---------- On Demand: quick workouts by time, body part, gym/home ---------- */
+const OD = { time: "any", focus: "All", where: null, sel: null };
+const odList = () => window.QUICK_WORKOUTS || [];
+const OD_TIMES = [["any", "Any time"], ["20", "≤ 20 min"], ["30", "30 min"], ["45", "45 min"], ["60", "60 min"]];
+const odFits = w => (OD.time === "any" || (OD.time === "20" ? w.min <= 20 : OD.time === "30" ? w.min > 20 && w.min <= 30 : OD.time === "45" ? w.min > 30 && w.min <= 45 : w.min > 45))
+  && (OD.focus === "All" || w.focus === OD.focus) && (w.where === "both" || w.where === OD.where);
+const odMeta = w => `${w.min} min · ${esc(w.focus)} · ${w.where === "both" ? "Gym or home" : w.where === "home" ? "Home" : "Gym"}`;
+function odCard(c) {
+  if (!odList().length || S.workoutsMissing) return "";
+  const pick = ["arm-blast", "express", "core"].map(id => odList().find(w => w.id === id)).filter(Boolean);
+  return `<section class="card od"><div class="card-h"><div><div class="kicker">On Demand</div><h2>${S.isTrainer ? "Quick workouts" : "Short on time? Pick one."}</h2></div><button type="button" class="btn sm" data-od="">Browse all</button></div>
+    <div class="od-picks">${pick.map(w => `<button type="button" class="od-pick" data-od="${esc(w.id)}"><b>${esc(w.name)}</b><span>${w.min} min · ${esc(w.focus)}</span></button>`).join("")}</div></section>`;
+}
+function openOD(c, id) {
+  const d = $("#dlgOD") || document.body.appendChild(Object.assign(document.createElement("dialog"), { id: "dlgOD", className: "wide od-dlg" }));
+  if (!OD.where) OD.where = getWhere();
+  OD.sel = id || null;
+  const draw = () => {
+    const w = OD.sel && odList().find(x => x.id === OD.sel);
+    if (w) {
+      d.innerHTML = `<div class="od-in"><div class="od-top"><button type="button" class="linkbtn" data-back>← All workouts</button><button type="button" class="linkbtn" data-x>Close</button></div>
+        <div class="kicker">On Demand</div><h3>${esc(w.name)}</h3><p class="muted small od-meta">${odMeta(w)}${w.level ? ` · ${esc(w.level)}` : ""}</p>${w.desc ? `<p class="od-desc">${esc(w.desc)}</p>` : ""}
+        <ol class="plist">${w.items.map(x => { const pics = exPics(x.name, x.ref), sr = [x.sets ? `${esc(x.sets)} × ${esc(x.reps || "")}` : esc(x.reps || ""), x.rest && !noRest(x.rest) ? `rest ${esc(x.rest)}` : ""].filter(Boolean).join(" · ");
+          return `<li${pics ? ` class="haspic"` : ""}>${pics}<div class="ptxt"><div class="pname">${x.ss ? `<span class="sstag">${x.ss === "Circuit" ? "Circuit" : `Superset ${esc(x.ss)}`}</span> ` : ""}${esc(x.name)}</div>${sr ? `<div class="psr">${sr}</div>` : ""}${x.note ? `<div class="pnote">${esc(x.note)}</div>` : ""}</div></li>`; }).join("")}</ol>
+        <button type="button" class="btn primary wide od-go" data-go>${S.isTrainer ? `Log it for ${esc(firstName(c.name))}` : "Start workout"}</button></div>`;
+      return;
+    }
+    const foci = ["All", ...new Set(odList().map(x => x.focus))], list = odList().filter(odFits);
+    d.innerHTML = `<div class="od-in"><div class="od-top"><div><div class="kicker">On Demand</div><h3>Pick a workout</h3></div><button type="button" class="linkbtn" data-x>Close</button></div>
+      <div class="seg od-where">${["gym", "home"].map(k => `<button type="button" data-where="${k}" aria-pressed="${OD.where === k}">${k === "gym" ? "🏋️ Gym" : "🏠 Home"}</button>`).join("")}</div>
+      <div class="odchips">${OD_TIMES.map(([k, t]) => `<button type="button" class="odchip" data-time="${k}" aria-pressed="${OD.time === k}">${t}</button>`).join("")}</div>
+      <div class="odchips">${foci.map(f => `<button type="button" class="odchip" data-focus="${esc(f)}" aria-pressed="${OD.focus === f}">${esc(f)}</button>`).join("")}</div>
+      <div class="od-list">${list.length ? list.map(w => `<button type="button" class="od-row" data-pick="${esc(w.id)}"><span class="od-min"><b>${w.min}</b>min</span><span class="od-txt"><b>${esc(w.name)}</b><span>${odMeta(w)}</span>${w.desc ? `<span class="od-d">${esc(w.desc)}</span>` : ""}</span><span class="od-ar">›</span></button>`).join("") : `<div class="empty">Nothing matches. Try another time or body part.</div>`}</div></div>`;
+  };
+  d.onclick = ev => {
+    const t = ev.target;
+    if (t === d || t.closest("[data-x]")) return d.close();
+    if (t.closest("[data-back]")) { OD.sel = null; draw(); d.scrollTop = 0; return; }
+    const b = t.closest("[data-where],[data-time],[data-focus],[data-pick],[data-go]"); if (!b) return;
+    if (b.dataset.where) OD.where = b.dataset.where;
+    if (b.dataset.time) OD.time = b.dataset.time;
+    if (b.dataset.focus) OD.focus = b.dataset.focus;
+    if (b.dataset.pick) { OD.sel = b.dataset.pick; draw(); d.scrollTop = 0; return; }
+    if (b.dataset.go != null) { const w = odList().find(x => x.id === OD.sel); d.close();
+      startLogger(c, { dayName: w.name, items: JSON.parse(JSON.stringify(w.items)), fixedWhere: w.where === "both" ? null : w.where }); return; }
+    draw();
+  };
+  draw(); if (!d.open) d.showModal(); d.scrollTop = 0;
+}
+
 /* ---------- phone tab bar (clients) ---------- */
 const TABS = [
   { k: "home", ic: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h5v-6h4v6h5V9.5"/></svg>', t: "Home" },
   { k: "workout", ic: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 7v10M3.5 9.5v5M18 7v10M20.5 9.5v5M6 12h12"/></svg>', t: "Workout" },
-  { k: "progress", ic: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19h16"/><path d="m5 15 4.5-4.5 3.5 3L19 7"/><path d="M15 7h4v4"/></svg>', t: "Progress" },
+  { k: "od", ic: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m10 8.5 5.5 3.5-5.5 3.5Z"/></svg>', t: "On Demand" },
   { k: "msgs", ic: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12Z"/></svg>', t: "Messages" },
   { k: "more", ic: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg>', t: "More" },
 ];
@@ -1220,6 +1271,7 @@ function drawTabBar(c) {
     if (k === "home") return window.scrollTo({ top: 0, behavior: "smooth" });
     if (k === "msgs") return openMessages(c);
     if (k === "more") return openMore(c);
+    if (k === "od") return openOD(c);
     const el = tabTarget(k); if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - (($(".bar") || {}).offsetHeight || 0) - 12, behavior: "smooth" }); };
   tabSpy();
 }
@@ -1227,7 +1279,7 @@ function tabSpy() {
   const bar = $("#tabbar"); if (!bar) return;
   const y = window.scrollY + (($(".bar") || {}).offsetHeight || 0) + 40, w = tabTarget("workout"), pr = tabTarget("progress");
   const pos = el => el ? el.getBoundingClientRect().top + window.scrollY : Infinity;
-  const k = y >= pos(pr) && pos(pr) > pos(w) ? "progress" : y >= pos(w) ? (y >= pos(pr) ? "progress" : "workout") : "home";
+  const k = y >= pos(w) && y < pos(pr) ? "workout" : "home";
   $$("#tabbar [data-tab]").forEach(b => b.classList.toggle("on", b.dataset.tab === k));
 }
 window.addEventListener("scroll", () => requestAnimationFrame(tabSpy), { passive: true });
@@ -1235,6 +1287,7 @@ function openMore(c) {
   const d = $("#dlgMore") || document.body.appendChild(Object.assign(document.createElement("dialog"), { id: "dlgMore", className: "sheet" }));
   const items = [
     [`📝`, S.isTrainer ? "New check-in" : "Log check-in", () => $("#newEntry")?.click()],
+    [`📈`, "Progress & trends", () => scrollToEl(tabTarget("progress"))],
     ...(IN_APP ? [[`⏰`, "Workout reminder", () => openReminders()]] : []),
     [`🏆`, "Badges & strength", () => { scrollToEl($(".card.badges") || $(".card.strength")); }],
     [`📸`, "Photos & check-in history", () => { scrollToEl($(".split")); }],
@@ -2001,6 +2054,7 @@ function progressHint(x, prev) {
 }
 
 let wDraft = null, wClient = null;
+const noRest = r => /^(none|no rest|0)$/i.test(String(r || "").trim());
 const targetOf = x => [x.sets ? `${x.sets} ×` : "", x.reps || ""].join(" ").trim() + (x.rir ? ` · ${x.rir} in the tank` : "");
 /* One exercise in the logger. Time-logged items (runs, HYROX stations) get min/sec boxes instead of weight × reps. */
 function mkEntry(x) {
@@ -2009,10 +2063,15 @@ function mkEntry(x) {
     sets: timed ? [] : Array.from({ length: nSets(x) }, () => clock ? { lb: "", min: "", sec: "" } : { lb: "", reps: "" }) };
 }
 function openWorkout(c, dayIdx) {
-  const day = S.plan.days[dayIdx]; wClient = c;
+  const day = S.plan.days[dayIdx];
   const pr = S.plan.program, wk = progWeek(pr), inProg = pr && wk >= 1 && wk <= pr.weeks;
-  const base = dayItems(day, pr, wk), where = getWhere();
-  wDraft = { clientId: c.id, date: todayISO(), dayName: day.name || `Day ${dayIdx + 1}`, note: "", program: inProg ? progKey(pr) : "", week: inProg ? wk : null, base, where,
+  startLogger(c, { dayName: day.name || `Day ${dayIdx + 1}`, items: dayItems(day, pr, wk), program: inProg ? progKey(pr) : "", week: inProg ? wk : null });
+}
+/* Opens the logger for any list of exercises: a plan day or an On Demand workout. */
+function startLogger(c, o) {
+  wClient = c;
+  const base = o.items, where = o.fixedWhere || getWhere();
+  wDraft = { clientId: c.id, date: todayISO(), dayName: o.dayName, note: "", program: o.program || "", week: o.week || null, base, where, fixedWhere: !!o.fixedWhere,
     entries: base.map(x0 => mkEntry(placeItem(x0, where))) };
   $("#wTitle").textContent = (wDraft.week ? `Week ${wDraft.week} · ` : "") + wDraft.dayName;
   $("#wSub").textContent = S.isTrainer ? `Logging for ${firstName(c.name)}` : "Log each set as you go. Leave a set blank if you skipped it.";
@@ -2029,11 +2088,12 @@ function switchWhere(where) {
 }
 function drawWorkout() {
   const ws = $("#wWhere"); if (ws) ws.outerHTML = whereSeg("wWhere", wDraft.where); else $("#wList").insertAdjacentHTML("beforebegin", whereSeg("wWhere", wDraft.where));
+  $("#wWhere").hidden = !!wDraft.fixedWhere;
   $$("#wWhere [data-where]").forEach(b => b.onclick = () => switchWhere(b.dataset.where));
   $("#wList").innerHTML = wDraft.entries.map((e, ei) => {
     const prev = lastFor(e.name), x = e.plan;
     const last = prev ? `<div class="wlast">Last time (${fmtD(prev.w.date)}): <b>${prev.e.sets.filter(logged).map(fmtSet).join(", ")}</b>${prev.e.target && prev.e.target !== e.target ? ` <span class="muted">(${esc(prev.e.target)})</span>` : ""}</div>` : "";
-    const head = `<div class="wex-h"><div class="wgrow"><div class="wname">${esc(e.name)}</div><div class="wtarget">Target ${esc(e.target)}${x.rest ? ` · rest ${esc(x.rest)}` : ""}</div></div><div class="wex-a">${refUrl(e.ref) ? `<a class="plink" href="${refUrl(e.ref)}" target="_blank" rel="noopener">Form →</a>` : ""}${e.timed || (e.clock && !String(x.rest || "").trim()) ? "" : `<button type="button" class="restbtn" data-rest="${ei}" aria-label="Start ${fmtClock(restSecs(x.rest))} rest timer">Rest ${fmtClock(restSecs(x.rest))}</button>`}</div></div>${exPics(e.name, e.ref)}`;
+    const head = `<div class="wex-h"><div class="wgrow">${x.ss ? `<span class="sstag">${x.ss === "Circuit" ? "Circuit" : `Superset ${esc(x.ss)}`}</span>` : ""}<div class="wname">${esc(e.name)}</div><div class="wtarget">Target ${esc(e.target)}${x.rest && !noRest(x.rest) ? ` · rest ${esc(x.rest)}` : noRest(x.rest) ? " · straight to the next move" : ""}</div></div><div class="wex-a">${refUrl(e.ref) ? `<a class="plink" href="${refUrl(e.ref)}" target="_blank" rel="noopener">Form →</a>` : ""}${e.timed || noRest(x.rest) || (e.clock && !String(x.rest || "").trim()) ? "" : `<button type="button" class="restbtn" data-rest="${ei}" aria-label="Start ${fmtClock(restSecs(x.rest))} rest timer">Rest ${fmtClock(restSecs(x.rest))}</button>`}</div></div>${exPics(e.name, e.ref)}`;
     if (e.timed) return `<div class="wex">${head}${x.note ? `<div class="pnote">${esc(x.note)}</div>` : ""}<label class="wdone"><input type="checkbox" data-done="${ei}"${e.done ? " checked" : ""}> Done</label></div>`;
     const ph = prev ? prev.e.sets.filter(st => st.lb != null).map(st => st.lb) : [];
     if (e.clock) {
@@ -2076,6 +2136,17 @@ $("#wList").addEventListener("change", ev => {
   const t = ev.target; if ((t.dataset.k !== "reps" && t.dataset.k !== "sec") || t.value === "") return;
   const ei = +t.dataset.e, si = +t.dataset.s, e = wDraft.entries[ei];
   if (e.clock && !String(e.plan.rest || "").trim()) return;   // race-style work: no rest timer between pieces
+  // Supersets and circuits: go to the next move in the group, rest only after the last one.
+  const ss = e.plan.ss, grp = ss ? wDraft.entries.map((x, k) => x.plan.ss === ss ? k : -1).filter(k => k >= 0) : null;
+  if (grp && grp.length > 1) {
+    const pos = grp.indexOf(ei), last = pos === grp.length - 1;
+    const tgt = last ? (si + 1 < e.sets.length ? [grp[0], si + 1] : null) : [grp[pos + 1], si];
+    if (tgt) wDraft.jump = [...document.querySelectorAll(`#wList input[data-e="${tgt[0]}"][data-s="${tgt[1]}"]`)].find(x => x.value === "") || null;
+    if (!last || noRest(e.plan.rest)) { stopRest(); return; }
+    const nx = tgt ? `Next: ${wDraft.entries[tgt[0]].name}, round ${tgt[1] + 1}` : (() => { const n = wDraft.entries.slice(ei + 1).find(x => !x.timed && x.plan.ss !== ss); return n ? `Next: ${n.name}` : "Last set done. Finish strong!"; })();
+    startRest(restSecs(e.plan.rest), nx); return;
+  }
+  if (noRest(e.plan.rest)) return;
   let next;
   if (si + 1 < e.sets.length) next = `Next: ${e.name}, set ${si + 2}`;
   else { const n = wDraft.entries.slice(ei + 1).find(x => !x.timed); next = n ? `Next: ${n.name}` : "Last set done. Finish strong!"; }
@@ -2087,16 +2158,15 @@ $("#wList").addEventListener("focusout", ev => {
   const t = ev.target;
   if (!t.dataset || !t.dataset.k || t.value === "" || (ev.relatedTarget && ev.relatedTarget.matches && ev.relatedTarget.matches("[data-k]"))) return;
   const all = $$("#wList input[data-k]"), i = all.indexOf(t);
-  const next = all.slice(i + 1).find(x => x.value === "");
+  const jump = wDraft.jump; wDraft.jump = null;
+  const next = jump && jump.value === "" ? jump : all.slice(i + 1).find(x => x.value === "");
   if (!next) return;
   next.focus({ preventScroll: true });
   next.scrollIntoView({ block: "center", behavior: "smooth" });
 });
 $("#wList").addEventListener("keydown", ev => {
   if (ev.key !== "Enter" || !ev.target.dataset || !ev.target.dataset.k) return;
-  ev.preventDefault();
-  const all = $$("#wList input[data-k]"), next = all.slice(all.indexOf(ev.target) + 1).find(x => x.value === "");
-  if (next) { next.focus({ preventScroll: true }); next.scrollIntoView({ block: "center", behavior: "smooth" }); } else ev.target.blur();
+  ev.preventDefault(); ev.target.blur();   // blur saves the value, then focusout moves to the next box
 });
 $("#wList").addEventListener("click", ev => { const r = ev.target.closest("[data-rest]"); if (r) { const e = wDraft.entries[+r.dataset.rest]; startRest(restSecs(e.plan.rest), `Rest: ${e.name}`); } });
 $("#wList").addEventListener("click", ev => { const b = ev.target.closest("[data-addset]"); if (!b) return; const e = wDraft.entries[+b.dataset.addset]; if (e.sets.length < 12) { const lastLb = e.sets.length ? e.sets[e.sets.length - 1].lb : ""; e.sets.push(e.clock ? { lb: lastLb, min: "", sec: "" } : { lb: lastLb, reps: "" }); if (lastLb !== "") { e.autoLb = e.autoLb || {}; e.autoLb[e.sets.length - 1] = true; } drawWorkout(); } });

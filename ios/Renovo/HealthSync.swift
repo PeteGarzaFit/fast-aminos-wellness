@@ -10,9 +10,15 @@ struct DayRow {
     var activeKcal: Int?
     var exerciseMin: Int?
     var restingHr: Int?
+    // Food logged in MyFitnessPal (or any app that shares nutrition with Apple Health).
+    var kcalIn: Int?
+    var proteinG: Double?
+    var carbsG: Double?
+    var fatG: Double?
 
     var hasData: Bool {
         steps != nil || sleepHours != nil || weightLb != nil || activeKcal != nil || exerciseMin != nil || restingHr != nil
+            || kcalIn != nil || proteinG != nil || carbsG != nil || fatG != nil
     }
 
     var json: [String: Any] {
@@ -23,6 +29,10 @@ struct DayRow {
         if let v = activeKcal { out["activeKcal"] = v }
         if let v = exerciseMin { out["exerciseMin"] = v }
         if let v = restingHr { out["restingHr"] = v }
+        if let v = kcalIn { out["kcalIn"] = v }
+        if let v = proteinG { out["proteinG"] = v }
+        if let v = carbsG { out["carbsG"] = v }
+        if let v = fatG { out["fatG"] = v }
         return out
     }
 }
@@ -42,7 +52,8 @@ final class HealthSync {
 
     private var readTypes: Set<HKObjectType> {
         var types: Set<HKObjectType> = []
-        let quantities: [HKQuantityTypeIdentifier] = [.stepCount, .bodyMass, .activeEnergyBurned, .appleExerciseTime, .restingHeartRate]
+        let quantities: [HKQuantityTypeIdentifier] = [.stepCount, .bodyMass, .activeEnergyBurned, .appleExerciseTime, .restingHeartRate,
+                                                      .dietaryEnergyConsumed, .dietaryProtein, .dietaryCarbohydrates, .dietaryFatTotal]
         for id in quantities {
             if let type = HKObjectType.quantityType(forIdentifier: id) { types.insert(type) }
         }
@@ -68,6 +79,10 @@ final class HealthSync {
         let restingHr = (try? await dailyStats(.restingHeartRate, options: .discreteAverage, unit: bpm, start: start, end: end)) ?? [:]
         let weight = (try? await dailyStats(.bodyMass, options: .mostRecent, unit: .pound(), start: start, end: end)) ?? [:]
         let sleep = (try? await dailySleepHours(start: start, end: end)) ?? [:]
+        let food = (try? await dailyStats(.dietaryEnergyConsumed, options: .cumulativeSum, unit: .kilocalorie(), start: start, end: end)) ?? [:]
+        let protein = (try? await dailyStats(.dietaryProtein, options: .cumulativeSum, unit: .gram(), start: start, end: end)) ?? [:]
+        let carbs = (try? await dailyStats(.dietaryCarbohydrates, options: .cumulativeSum, unit: .gram(), start: start, end: end)) ?? [:]
+        let fat = (try? await dailyStats(.dietaryFatTotal, options: .cumulativeSum, unit: .gram(), start: start, end: end)) ?? [:]
 
         var rows: [DayRow] = []
         var day = start
@@ -80,7 +95,11 @@ final class HealthSync {
                 weightLb: Self.round(weight[key], places: 1, within: 50...900),
                 activeKcal: Self.int(kcal[key], within: 0...20_000),
                 exerciseMin: Self.int(exercise[key], within: 0...1_440),
-                restingHr: Self.int(restingHr[key], within: 20...250)
+                restingHr: Self.int(restingHr[key], within: 20...250),
+                kcalIn: Self.int(food[key], within: 0...20_000),
+                proteinG: Self.round(protein[key], places: 1, within: 0...2_000),
+                carbsG: Self.round(carbs[key], places: 1, within: 0...3_000),
+                fatG: Self.round(fat[key], places: 1, within: 0...1_000)
             ))
             guard let next = cal.date(byAdding: .day, value: 1, to: day) else { break }
             day = next

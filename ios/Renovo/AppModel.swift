@@ -79,9 +79,9 @@ final class AppModel: NSObject, ObservableObject {
 
     @MainActor
     func appBecameActive() {
-        // Refresh Health data when the client comes back to the app, at most every 15 minutes.
+        // Refresh Health data when the client comes back to the app, at most every 2 minutes.
         guard clientReady, health.isConnected else { return }
-        if let last = lastSync, Date().timeIntervalSince(last) < 15 * 60 { return }
+        if let last = lastSync, Date().timeIntervalSince(last) < 2 * 60 { return }   // quick refresh after logging food elsewhere
         Task { await syncNow(days: 14) }
     }
 
@@ -98,6 +98,11 @@ final class AppModel: NSObject, ObservableObject {
                 // One-time 90-day backfill for the trend charts, then the last 2 weeks on each open.
                 let backfilled = UserDefaults.standard.bool(forKey: "healthBackfill90")
                 Task {
+                    // Version 2 also reads food (MyFitnessPal etc.). Apple only asks about the new types.
+                    if UserDefaults.standard.integer(forKey: "healthAuthVersion") < 2 {
+                        try? await health.requestAuthorization()
+                        UserDefaults.standard.set(2, forKey: "healthAuthVersion")
+                    }
                     await syncNow(days: backfilled ? 14 : 90, force: !backfilled)
                     UserDefaults.standard.set(true, forKey: "healthBackfill90")
                 }
@@ -122,6 +127,7 @@ final class AppModel: NSObject, ObservableObject {
         do {
             try await health.requestAuthorization()
             health.isConnected = true
+            UserDefaults.standard.set(2, forKey: "healthAuthVersion")
             await syncNow(days: 90, force: true)
             UserDefaults.standard.set(true, forKey: "healthBackfill90")
             Reminders.requestAndScheduleWeeklyCheckIn()

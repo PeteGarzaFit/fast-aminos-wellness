@@ -14,7 +14,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="FA Tracker">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="stylesheet" href="app.css?v=20261003b">
+<link rel="stylesheet" href="app.css?v=20261003c">
 </head>
 <body>
 <header class="bar">
@@ -42,6 +42,13 @@
       <div class="field"><label for="c-in">Height, inches</label><input id="c-in" type="number" inputmode="decimal" min="0" max="11.5" step="0.5"></div>
     </div>
     <div class="field"><label for="c-water">Daily water goal, oz (optional)</label><input id="c-water" type="number" inputmode="numeric" min="16" max="256" step="8" placeholder="Leave empty: half their body weight in oz"></div>
+    <fieldset class="macros"><legend>Daily nutrition targets (optional)</legend>
+      <div class="grid4">
+        <div class="field"><label for="c-kcal">Calories</label><input id="c-kcal" type="number" inputmode="numeric" min="800" max="8000" step="10"></div>
+        <div class="field"><label for="c-prot">Protein g</label><input id="c-prot" type="number" inputmode="numeric" min="20" max="600"></div>
+        <div class="field"><label for="c-carb">Carbs g</label><input id="c-carb" type="number" inputmode="numeric" min="0" max="1000"></div>
+        <div class="field"><label for="c-fat">Fat g</label><input id="c-fat" type="number" inputmode="numeric" min="10" max="400"></div>
+      </div><span class="hint">Shown as rings when the client logs food in MyFitnessPal (shared to Apple Health). Tip: use Calories &amp; macros to work these out.</span></fieldset>
     <div class="field"><label for="c-goal">Goal (optional)</label><input id="c-goal" type="text" placeholder="e.g. Drop 10 lb of fat, keep lean mass"></div>
     <label class="chk" for="c-glp1"><input id="c-glp1" type="checkbox"> On a GLP-1 medication <span class="hint">(adds side-effect questions to their check-ins)</span></label>
     <div class="err" id="cErr"></div>
@@ -135,10 +142,10 @@
   </form>
 </dialog>
 
-<script src="config.js?v=20261003b"></script>
+<script src="config.js?v=20261003c"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
-<script src="library.js?v=20261003b"></script>
-<script src="exercise-images.js?v=20261003b"></script>
-<script src="app.js?v=20261003b"></script>
+<script src="library.js?v=20261003c"></script>
+<script src="exercise-images.js?v=20261003c"></script>
+<script src="app.js?v=20261003c"></script>
 </body>
 </html>

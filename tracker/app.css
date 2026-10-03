@@ -443,3 +443,23 @@ td .feelline{display:block;font-size:12px;color:var(--ink-2);margin-top:2px;whit
 
 .acct-foot{text-align:center;padding:18px 0 4px}
 .linkbtn.danger{color:var(--bad);font-size:13px;align-self:center}
+
+/* Fuel (nutrition rings) */
+.fuel-top{display:flex;align-items:center;gap:16px;margin-bottom:12px}
+.fuel-top svg{flex:none}
+.fuel-math{list-style:none;margin:0;padding:0;flex:1;display:grid;gap:3px;font-size:13.5px;font-variant-numeric:tabular-nums}
+.fuel-math li{display:flex;justify-content:space-between;gap:8px;color:var(--ink-2)}
+.fuel-math li b{color:var(--ink)}
+.fuel-math li.eq{border-top:1px solid var(--line);padding-top:4px;margin-top:2px;font-weight:700}
+.fuel-math li.eq b{color:var(--blue);font-size:15px}
+.fuel-macros{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;text-align:center}
+.mring{display:flex;flex-direction:column;align-items:center;gap:2px}
+.mring svg{max-width:100%;height:auto}
+.mlbl{font-size:12.5px;font-weight:700;color:var(--ink-2);display:inline-flex;align-items:center;gap:5px}
+.mlbl i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.mring.over .mlbl{color:#b36b00}
+fieldset.macros{border:1px solid var(--line);border-radius:12px;padding:10px 12px 12px;margin:0}
+fieldset.macros legend{font-size:13px;font-weight:700;padding:0 4px;color:var(--ink-2)}
+.grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+@media (max-width:480px){.grid4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){.fuel{padding:14px}.fuel-top{gap:12px}}

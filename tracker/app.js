@@ -112,13 +112,13 @@ function summaryText(c, s, forClient) {
 
 /* ---------- data backends ---------- */
 const BUCKET = "progress-photos";
-const fromClientRow = r => ({ id: r.id, userId: r.user_id, email: r.email, name: r.name, sex: r.sex, dob: r.dob, height: num(r.height_in), goal: r.goal, glp1: !!r.on_glp1, active: r.active !== false, waterGoal: num(r.water_goal_oz) });
-const toClientRow = c => ({ email: c.email, name: c.name, sex: c.sex, dob: c.dob || null, height_in: c.height, goal: c.goal || null, on_glp1: !!c.glp1, water_goal_oz: c.waterGoal ?? null });
+const fromClientRow = r => ({ id: r.id, userId: r.user_id, email: r.email, name: r.name, sex: r.sex, dob: r.dob, height: num(r.height_in), goal: r.goal, glp1: !!r.on_glp1, active: r.active !== false, waterGoal: num(r.water_goal_oz), kcalGoal: num(r.kcal_goal), proteinGoal: num(r.protein_goal), carbsGoal: num(r.carbs_goal), fatGoal: num(r.fat_goal) });
+const toClientRow = c => ({ email: c.email, name: c.name, sex: c.sex, dob: c.dob || null, height_in: c.height, goal: c.goal || null, on_glp1: !!c.glp1, water_goal_oz: c.waterGoal ?? null, kcal_goal: c.kcalGoal ?? null, protein_goal: c.proteinGoal ?? null, carbs_goal: c.carbsGoal ?? null, fat_goal: c.fatGoal ?? null });
 const FEEL_KEYS = ["energy", "hunger", "sleep_q", "sleep_hours", "steps", "side_effects"];
 const SIDE_EFFECTS = ["Nausea", "Vomiting", "Constipation", "Diarrhea", "Heartburn", "Bloating", "Tired", "Headache", "Dizzy", "Low appetite"];
 const fromCheckinRow = r => ({ id: r.id, clientId: r.client_id, date: r.date, weight: num(r.weight_lb), waist: num(r.waist_in), neck: num(r.neck_in), hip: num(r.hip_in), omron: num(r.omron_bf), photoFront: r.photo_front, photoSide: r.photo_side, note: r.note, energy: num(r.energy), hunger: num(r.hunger), sleepQ: num(r.sleep_q), sleepH: num(r.sleep_hours), steps: num(r.steps), sideEffects: Array.isArray(r.side_effects) ? r.side_effects : [], coachNote: r.coach_note || null, coachNoteAt: r.coach_note_at || null, enteredBy: r.entered_by, createdAt: r.created_at });
 const fromWorkoutRow = r => ({ id: r.id, clientId: r.client_id, date: r.date, dayName: r.day_name || "", entries: Array.isArray(r.entries) ? r.entries : [], note: r.note || "", enteredBy: r.entered_by, createdAt: r.created_at });
-const fromHealthRow = r => ({ date: r.date, steps: num(r.steps), sleepH: num(r.sleep_hours), weight: num(r.weight_lb), kcal: num(r.active_kcal), exMin: num(r.exercise_min), rhr: num(r.resting_hr), updatedAt: r.updated_at });
+const fromHealthRow = r => ({ date: r.date, steps: num(r.steps), sleepH: num(r.sleep_hours), weight: num(r.weight_lb), kcal: num(r.active_kcal), exMin: num(r.exercise_min), rhr: num(r.resting_hr), kcalIn: num(r.kcal_in), protein: num(r.protein_g), carbs: num(r.carbs_g), fat: num(r.fat_g), updatedAt: r.updated_at });
 const fromTplRow = r => ({ id: r.id, name: r.name, title: r.title || "", notes: r.notes || "", days: Array.isArray(r.days) ? r.days : [] });
 const fromPlanRow = r => r ? ({ title: r.title || "", notes: r.notes || "", days: Array.isArray(r.days) ? r.days : [], updatedAt: r.updated_at }) : null;
 /* Supabase reports a missing table/column when the October 2026 database update hasn't been run yet. */
@@ -126,7 +126,7 @@ const isMissing = e => !!e && (e.code === "42P01" || e.code === "42703" || e.cod
 const toCheckinRow = e => ({ client_id: e.clientId, date: e.date, weight_lb: e.weight, waist_in: e.waist, neck_in: e.neck, hip_in: e.hip, omron_bf: e.omron, photo_front: e.photoFront, photo_side: e.photoSide, note: e.note,
   energy: e.energy ?? null, hunger: e.hunger ?? null, sleep_q: e.sleepQ ?? null, sleep_hours: e.sleepH ?? null, steps: e.steps ?? null, side_effects: e.sideEffects && e.sideEffects.length ? e.sideEffects : null });
 /* Before the October 2026 database update the new columns don't exist yet; save without them. */
-const withoutFeel = row => { const r = { ...row }; FEEL_KEYS.forEach(k => delete r[k]); delete r.on_glp1; delete r.water_goal_oz; return r; };
+const withoutFeel = row => { const r = { ...row }; FEEL_KEYS.forEach(k => delete r[k]); delete r.on_glp1; delete r.water_goal_oz; delete r.kcal_goal; delete r.protein_goal; delete r.carbs_goal; delete r.fat_goal; return r; };
 
 function supaApi(sb) {
   const chk = ({ data, error }) => { if (error) throw error; return data; };
@@ -179,8 +179,11 @@ function supaApi(sb) {
     async upsertHealth(clientId, rows) {
       /* Values outside the database limits are dropped (not the whole day), so one odd reading never blocks a sync. */
       const rng = (v, lo, hi, int) => { const n = num(v); if (n == null || n < lo || n > hi) return null; return int ? Math.round(n) : n; };
-      const clean = rows.map(r => ({ client_id: clientId, date: r.date, steps: rng(r.steps, 0, 200000, true), sleep_hours: rng(r.sleepHours, 0, 24), weight_lb: rng(r.weightLb, 50, 900), active_kcal: rng(r.activeKcal, 0, 20000, true), exercise_min: rng(r.exerciseMin, 0, 1440, true), resting_hr: rng(r.restingHr, 20, 250, true), source: "apple_health" }));
-      if (clean.length) chk(await sb.from("health_daily").upsert(clean, { onConflict: "client_id,date" }));
+      const clean = rows.map(r => ({ client_id: clientId, date: r.date, steps: rng(r.steps, 0, 200000, true), sleep_hours: rng(r.sleepHours, 0, 24), weight_lb: rng(r.weightLb, 50, 900), active_kcal: rng(r.activeKcal, 0, 20000, true), exercise_min: rng(r.exerciseMin, 0, 1440, true), resting_hr: rng(r.restingHr, 20, 250, true), kcal_in: rng(r.kcalIn, 0, 20000, true), protein_g: rng(r.proteinG, 0, 2000), carbs_g: rng(r.carbsG, 0, 3000), fat_g: rng(r.fatG, 0, 1000), source: "apple_health" }));
+      if (!clean.length) return;
+      let res = await sb.from("health_daily").upsert(clean, { onConflict: "client_id,date" });
+      if (res.error && isMissing(res.error)) res = await sb.from("health_daily").upsert(clean.map(({ kcal_in, protein_g, carbs_g, fat_g, ...r }) => r), { onConflict: "client_id,date" });
+      chk(res);
     },
     async deleteAccount(clientIds) {
       for (const id of clientIds) {
@@ -214,7 +217,7 @@ function supaApi(sb) {
 
 function demoApi(asClient) {
   const clients = [
-    { id: "c1", userId: asClient ? "me" : "u1", email: "sample.client@example.com", name: "Sample Client", sex: "female", dob: "1990-04-12", height: 65, goal: "Lose fat, keep lean mass", glp1: true, active: true },
+    { id: "c1", userId: asClient ? "me" : "u1", email: "sample.client@example.com", name: "Sample Client", sex: "female", dob: "1990-04-12", height: 65, goal: "Lose fat, keep lean mass", glp1: true, active: true, kcalGoal: 1850, proteinGoal: 140, carbsGoal: 170, fatGoal: 65 },
     { id: "c2", userId: null, email: "sample.two@example.com", name: "Sample Client Two", sex: "male", dob: "1984-11-02", height: 70, goal: "Recomp for summer", active: false }
   ];
   const raw = [["c1","2026-06-08",162.4,31.5,13.5,39.8,30.1],["c1","2026-06-22",161.0,31.2,13.5,39.6],["c1","2026-07-06",159.8,30.9,13.4,39.4],["c1","2026-07-20",158.6,30.6,13.4,39.3,28.9],["c1","2026-08-03",157.9,30.4,13.4,39.1],["c1","2026-08-17",156.8,30.1,13.3,38.9],["c1","2026-08-31",156.2,29.9,13.3,38.8,27.4],["c1","2026-09-14",155.5,29.7,13.3,38.6],["c1","2026-09-28",155.1,29.3,13.3,38.5],
@@ -241,8 +244,8 @@ function demoApi(asClient) {
   };
   let workouts = [logDay("2026-09-07", 0, 0), logDay("2026-09-08", 1, 0), logDay("2026-09-14", 0, 1), logDay("2026-09-15", 1, 1), logDay("2026-09-21", 0, 2), logDay("2026-09-22", 1, 2), logDay("2026-09-28", 0, 3), logDay("2026-09-29", 1, 3)];
   /* Sample Apple Health days for the demo client, newest first. */
-  const health = Array.from({ length: 21 }, (_, i) => { const d = new Date(2026, 9, 1 - i); const iso = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
-    return { date: iso, steps: 7000 + ((i * 1337) % 4200), sleepH: 6.4 + ((i * 7) % 12) / 10, weight: +(154.6 + i * 0.12).toFixed(1), kcal: 380 + ((i * 53) % 260), exMin: 22 + ((i * 11) % 35), rhr: 61 + (i % 4), updatedAt: "2026-10-01T07:30:00Z" }; });
+  const health = Array.from({ length: 21 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - i); const iso = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+    return { date: iso, steps: 7000 + ((i * 1337) % 4200), sleepH: 6.4 + ((i * 7) % 12) / 10, weight: +(154.6 + i * 0.12).toFixed(1), kcal: 380 + ((i * 53) % 260), exMin: 22 + ((i * 11) % 35), rhr: 61 + (i % 4), kcalIn: i === 0 ? 1180 : 1700 + ((i * 97) % 300), protein: i === 0 ? 96 : 120 + ((i * 7) % 30), carbs: i === 0 ? 104 : 150 + ((i * 13) % 40), fat: i === 0 ? 41 : 55 + ((i * 5) % 15), updatedAt: "2026-10-01T07:30:00Z" }; });
   /* Sample water: today partly done, the last two weeks mostly near goal. */
   const water = Array.from({ length: 14 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - i); return { date: d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()), oz: i === 0 ? 32 : [80, 64, 72, 88, 56, 80, 72, 64, 88, 80, 72, 48, 80][i - 1] }; });
   const templates = [{ id: "t1", name: "Sample 3-day plan", title: plans.c1.title, notes: plans.c1.notes, days: JSON.parse(JSON.stringify(plans.c1.days)) }];
@@ -264,7 +267,7 @@ function demoApi(asClient) {
     async deletePlan(id) { await wait(); delete plans[id]; },
     async saveFeedback(eid, note) { await wait(); const e = entries.find(x => x.id === eid); e.coachNote = note || null; e.coachNoteAt = note ? new Date().toISOString() : null; return { ...e }; },
     async listHealth(id) { await wait(); return id === "c1" ? health.slice() : []; },
-    async upsertHealth(id, rows) { await wait(); rows.forEach(r => { const i = health.findIndex(h => h.date === r.date); const h = { date: r.date, steps: r.steps ?? null, sleepH: r.sleepHours ?? null, weight: r.weightLb ?? null, kcal: r.activeKcal ?? null, exMin: r.exerciseMin ?? null, rhr: r.restingHr ?? null, updatedAt: new Date().toISOString() }; if (i >= 0) health[i] = h; else health.push(h); }); health.sort((a, b) => b.date.localeCompare(a.date)); },
+    async upsertHealth(id, rows) { await wait(); rows.forEach(r => { const i = health.findIndex(h => h.date === r.date); const h = { date: r.date, steps: r.steps ?? null, sleepH: r.sleepHours ?? null, weight: r.weightLb ?? null, kcal: r.activeKcal ?? null, exMin: r.exerciseMin ?? null, rhr: r.restingHr ?? null, kcalIn: r.kcalIn ?? null, protein: r.proteinG ?? null, carbs: r.carbsG ?? null, fat: r.fatG ?? null, updatedAt: new Date().toISOString() }; if (i >= 0) health[i] = h; else health.push(h); }); health.sort((a, b) => b.date.localeCompare(a.date)); },
     async deleteAccount() { await wait(); },
     async overview() { await wait();
       return { checkins: entries.map(e => ({ client_id: e.clientId, date: e.date, coach_note: e.coachNote, created_at: e.createdAt, weight_lb: e.weight })),
@@ -345,7 +348,7 @@ function render() {
   }
   if (!S.clients.length) { app.innerHTML = welcome(); const b = $("#welcomeAdd"); if (b) b.onclick = () => openClient(null); return; }
   const c = client(); const s = series(c, S.checkins);
-  app.innerHTML = `<div class="stack">${head(c, s)}${coachCallout(c)}${healthCard(c)}${waterCard(c)}${scoreCard(c)}${trendsCard()}${tiles(c, s)}${s.rows.length ? calNote(c, s) : ""}${planCard(c)}${workoutsCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div>${RENOVO && !S.isTrainer ? shopCard() : ""}${acctFoot()}</div>`;
+  app.innerHTML = `<div class="stack">${head(c, s)}${coachCallout(c)}${healthCard(c)}${waterCard(c)}${fuelCard(c)}${scoreCard(c)}${trendsCard()}${tiles(c, s)}${s.rows.length ? calNote(c, s) : ""}${planCard(c)}${workoutsCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div>${RENOVO && !S.isTrainer ? shopCard() : ""}${acctFoot()}</div>`;
   wire(c, s);
   const da = $("#delAcct"); if (da) da.onclick = openDeleteAccount;
 }
@@ -748,7 +751,7 @@ function openClient(c) {
   $("#cTitle").textContent = c ? "Edit client" : "New client";
   $("#c-name").value = c?.name || ""; $("#c-email").value = c?.email || ""; $("#c-sex").value = c?.sex || "female"; $("#c-dob").value = c?.dob || "";
   $("#c-ft").value = c?.height ? Math.floor(c.height / 12) : ""; $("#c-in").value = c?.height ? Math.round((c.height % 12) * 2) / 2 : "";
-  $("#c-goal").value = c?.goal || ""; $("#c-glp1").checked = !!c?.glp1; $("#c-water").value = c?.waterGoal ?? ""; $("#cErr").textContent = "";
+  $("#c-goal").value = c?.goal || ""; $("#c-glp1").checked = !!c?.glp1; $("#c-water").value = c?.waterGoal ?? ""; $("#c-kcal").value = c?.kcalGoal ?? ""; $("#c-prot").value = c?.proteinGoal ?? ""; $("#c-carb").value = c?.carbsGoal ?? ""; $("#c-fat").value = c?.fatGoal ?? ""; $("#cErr").textContent = "";
   const del = $("#cDelete"); del.hidden = !c; del.classList.remove("armed"); del.textContent = "Delete client"; del.disabled = false;
   $("#dlgClient").showModal();
 }
@@ -769,7 +772,10 @@ $("#fClient").onsubmit = async ev => {
   if (ft == null || ft < 3 || ft > 7 || inch < 0 || inch >= 12) { err.textContent = "Height is needed for the tape formula. Enter feet and inches."; return; }
   const wg = num($("#c-water").value);
   if (wg != null && (wg < 16 || wg > 256)) { err.textContent = "Water goal should be between 16 and 256 oz, or leave it empty."; return; }
-  const d = { name, email, sex: $("#c-sex").value, dob: $("#c-dob").value || null, height: ft * 12 + inch, goal: $("#c-goal").value.trim() || null, glp1: $("#c-glp1").checked, waterGoal: wg != null ? Math.round(wg) : null };
+  const mg = id => { const v = num($(id).value); return v == null ? null : Math.round(v); };
+  const kg = mg("#c-kcal"), pg = mg("#c-prot"), cg = mg("#c-carb"), fg = mg("#c-fat");
+  if ((kg != null && (kg < 800 || kg > 8000)) || (pg != null && (pg < 20 || pg > 600)) || (cg != null && (cg < 0 || cg > 1000)) || (fg != null && (fg < 10 || fg > 400))) { err.textContent = "Check the nutrition targets: calories 800–8000, protein 20–600 g, carbs 0–1000 g, fat 10–400 g."; return; }
+  const d = { name, email, sex: $("#c-sex").value, dob: $("#c-dob").value || null, height: ft * 12 + inch, goal: $("#c-goal").value.trim() || null, glp1: $("#c-glp1").checked, waterGoal: wg != null ? Math.round(wg) : null, kcalGoal: kg, proteinGoal: pg, carbsGoal: cg, fatGoal: fg };
   const btn = $("#cSave"); btn.disabled = true; err.textContent = "";
   try {
     const saved = await api.saveClient(d, editing?.id);
@@ -982,6 +988,43 @@ function wireWater(c) {
     if (before < goal && oz >= goal) toast("Water goal hit! 💧");
     waterSave = waterSave.then(() => api.setWater(c.id, t, oz)).catch(err => { console.error(err); toast("Couldn't save your water. Check your connection."); });
   });
+}
+
+/* ---------- fuel: food from MyFitnessPal (via Apple Health) vs. the coach's targets ---------- */
+const MACRO_COLORS = { kcal: "var(--blue)", protein: "#1683ff", carbs: "#38c4f0", fat: "#f5a524" };
+function arc(pct, size, color, inner) {
+  const r = 42, C = 2 * Math.PI * r, p = Math.max(0, Math.min(100, pct)), off = C * (1 - p / 100);
+  return `<svg viewBox="0 0 100 100" width="${size}" height="${size}" aria-hidden="true"><circle cx="50" cy="50" r="${r}" fill="none" stroke="var(--grid)" stroke-width="10"/>
+    <circle cx="50" cy="50" r="${r}" fill="none" stroke="${color}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" transform="rotate(-90 50 50)" style="transition:stroke-dashoffset .6s ease"/>${inner || ""}</svg>`;
+}
+function fuelCard(c) {
+  if (S.healthMissing) return "";
+  const t = todayISO(), today = S.health.find(h => h.date === t) || {};
+  const everFood = S.health.some(h => h.kcalIn != null || h.protein != null);
+  const hasGoals = c.kcalGoal || c.proteinGoal || c.carbsGoal || c.fatGoal;
+  if (S.isTrainer && !everFood) return "";
+  if (!everFood) {
+    if (!IN_APP) return "";
+    return `<section class="card fuel"><div class="card-h"><div><div class="kicker">Nutrition</div><h2>Fuel</h2></div></div>
+      <div class="empty">Log your food in <b>MyFitnessPal</b> and your calories, protein, carbs and fat show up here as rings.<br><span class="small">One-time setup in MyFitnessPal: <i>More → Settings → Sharing &amp; Privacy → HealthKit Sharing</i> → turn on nutrition. Then come back here and tap <b>Sync</b> on the Apple Health card.</span></div></section>`;
+  }
+  const eaten = today.kcalIn || 0, active = today.kcal || 0;
+  const macro = (k, label, val, goal) => {
+    const v = Math.round(val || 0), pct = goal ? Math.round(v / goal * 100) : null;
+    const inner = `<text x="50" y="${goal ? 49 : 56}" text-anchor="middle" font-size="${goal ? 21 : 22}" font-weight="800" fill="var(--ink)">${goal ? pct + "%" : v + "g"}</text>${goal ? `<text x="50" y="66" text-anchor="middle" font-size="11" fill="var(--muted)">${v}/${goal}g</text>` : ""}`;
+    return `<div class="mring${pct != null && pct > 110 ? " over" : ""}">${arc(pct ?? 0, 84, MACRO_COLORS[k], inner)}<span class="mlbl"><i style="background:${MACRO_COLORS[k]}"></i>${label}</span></div>`;
+  };
+  let top;
+  if (c.kcalGoal) {
+    const budget = c.kcalGoal + active, left = budget - eaten, pct = Math.round(eaten / budget * 100);
+    const inner = `<text x="50" y="50" text-anchor="middle" font-size="22" font-weight="850" fill="var(--ink)">${Math.abs(left).toLocaleString("en-US")}</text><text x="50" y="65" text-anchor="middle" font-size="11" fill="var(--muted)">${left >= 0 ? "cal left" : "cal over"}</text>`;
+    top = `<div class="fuel-top">${arc(pct, 112, left >= 0 ? MACRO_COLORS.kcal : "#f5a524", inner)}
+      <ul class="fuel-math"><li><span>Goal</span><b>${c.kcalGoal.toLocaleString("en-US")}</b></li><li><span>Food</span><b>− ${eaten.toLocaleString("en-US")}</b></li><li><span>Activity</span><b>+ ${active.toLocaleString("en-US")}</b></li><li class="eq"><span>${left >= 0 ? "Left" : "Over"}</span><b>${Math.abs(left).toLocaleString("en-US")}</b></li></ul></div>`;
+  } else {
+    top = `<div class="fuel-top"><div><span class="big">${eaten.toLocaleString("en-US")}<small> cal eaten</small></span><p class="small muted" style="margin:4px 0 0">${S.isTrainer ? "Set calorie and macro targets in <b>Edit client</b> to turn these into progress rings." : `${esc(TRAINER)} will set your daily targets. Until then you'll see what you've logged.`}</p></div></div>`;
+  }
+  return `<section class="card fuel"><div class="card-h"><div><div class="kicker">Today · from MyFitnessPal</div><h2>Fuel</h2></div>${eaten === 0 && !today.protein ? `<span class="muted small">Nothing logged yet today</span>` : ""}</div>
+    ${top}<div class="fuel-macros">${macro("protein", "Protein", today.protein, c.proteinGoal)}${macro("carbs", "Carbs", today.carbs, c.carbsGoal)}${macro("fat", "Fat", today.fat, c.fatGoal)}</div></section>`;
 }
 
 /* ---------- weekly score + trends ---------- */

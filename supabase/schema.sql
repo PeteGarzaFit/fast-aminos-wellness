@@ -145,6 +145,18 @@ create table if not exists public.health_daily (
   primary key (client_id, date)
 );
 
+-- Food logged in MyFitnessPal (or any app that shares nutrition to Apple Health),
+-- one total per day, plus the client's daily targets set by the trainer (added October 2026).
+alter table public.health_daily add column if not exists kcal_in   integer      check (kcal_in between 0 and 20000);
+alter table public.health_daily add column if not exists protein_g numeric(6,1) check (protein_g between 0 and 2000);
+alter table public.health_daily add column if not exists carbs_g   numeric(6,1) check (carbs_g between 0 and 3000);
+alter table public.health_daily add column if not exists fat_g     numeric(6,1) check (fat_g between 0 and 1000);
+alter table public.clients add column if not exists kcal_goal    smallint check (kcal_goal between 800 and 8000);
+alter table public.clients add column if not exists protein_goal smallint check (protein_goal between 20 and 600);
+alter table public.clients add column if not exists carbs_goal   smallint check (carbs_goal between 0 and 1000);
+alter table public.clients add column if not exists fat_goal     smallint check (fat_goal between 10 and 400);
+
+
 -- Older setups put helpers in public; remove them there.
 drop function if exists public.is_trainer() cascade;
 drop function if exists public.my_client_ids() cascade;

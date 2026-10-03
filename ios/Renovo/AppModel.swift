@@ -96,13 +96,14 @@ final class AppModel: NSObject, ObservableObject {
             guard clientReady else { return }
             if health.isConnected {
                 // One-time 90-day backfill for the trend charts, then the last 2 weeks on each open.
-                let backfilled = UserDefaults.standard.bool(forKey: "healthBackfill90")
                 Task {
                     // Version 2 added food (MyFitnessPal etc.), version 3 heart rate variability. Apple only asks about new types.
                     if UserDefaults.standard.integer(forKey: "healthAuthVersion") < 3 {
                         try? await health.requestAuthorization()
                         UserDefaults.standard.set(3, forKey: "healthAuthVersion")
+                        UserDefaults.standard.set(false, forKey: "healthBackfill90")   // pull 90 days of the new data too
                     }
+                    let backfilled = UserDefaults.standard.bool(forKey: "healthBackfill90")
                     await syncNow(days: backfilled ? 14 : 90, force: !backfilled)
                     UserDefaults.standard.set(true, forKey: "healthBackfill90")
                 }

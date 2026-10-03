@@ -16,10 +16,11 @@ struct DayRow {
     var carbsG: Double?
     var fatG: Double?
     var hrvMs: Int?           // heart rate variability (SDNN), daily average
+    var zone2Min: Int?        // minutes in the client's Zone 2 range during watch workouts
 
     var hasData: Bool {
         steps != nil || sleepHours != nil || weightLb != nil || activeKcal != nil || exerciseMin != nil || restingHr != nil
-            || kcalIn != nil || proteinG != nil || carbsG != nil || fatG != nil || hrvMs != nil
+            || kcalIn != nil || proteinG != nil || carbsG != nil || fatG != nil || hrvMs != nil || zone2Min != nil
     }
 
     var json: [String: Any] {
@@ -35,6 +36,7 @@ struct DayRow {
         if let v = carbsG { out["carbsG"] = v }
         if let v = fatG { out["fatG"] = v }
         if let v = hrvMs { out["hrvMs"] = v }
+        if let v = zone2Min { out["zone2Min"] = v }
         return out
     }
 }
@@ -56,11 +58,12 @@ final class HealthSync {
         var types: Set<HKObjectType> = []
         let quantities: [HKQuantityTypeIdentifier] = [.stepCount, .bodyMass, .activeEnergyBurned, .appleExerciseTime, .restingHeartRate,
                                                       .dietaryEnergyConsumed, .dietaryProtein, .dietaryCarbohydrates, .dietaryFatTotal,
-                                                      .heartRateVariabilitySDNN]
+                                                      .heartRateVariabilitySDNN, .heartRate]
         for id in quantities {
             if let type = HKObjectType.quantityType(forIdentifier: id) { types.insert(type) }
         }
         if let sleep = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) { types.insert(sleep) }
+        types.insert(HKObjectType.workoutType())
         return types
     }
 
@@ -69,7 +72,7 @@ final class HealthSync {
     }
 
     /// Daily rows for the last `days` days (today included), newest first.
-    func dailyRows(days: Int) async -> [DayRow] {
+    func dailyRows(days: Int, zone2: ClosedRange<Double>? = nil) async -> [DayRow] {
         let cal = Calendar.current
         let end = Date()
         let today = cal.startOfDay(for: end)
@@ -87,6 +90,8 @@ final class HealthSync {
         let carbs = (try? await dailyStats(.dietaryCarbohydrates, options: .cumulativeSum, unit: .gram(), start: start, end: end)) ?? [:]
         let fat = (try? await dailyStats(.dietaryFatTotal, options: .cumulativeSum, unit: .gram(), start: start, end: end)) ?? [:]
         let hrv = (try? await dailyStats(.heartRateVariabilitySDNN, options: .discreteAverage, unit: .secondUnit(with: .milli), start: start, end: end)) ?? [:]
+        var zone: [String: Int] = [:]
+        if let range = zone2 { zone = await zone2Minutes(start: start, end: end, range: range) }
 
         var rows: [DayRow] = []
         var day = start
@@ -104,7 +109,8 @@ final class HealthSync {
                 proteinG: Self.round(protein[key], places: 1, within: 0...2_000),
                 carbsG: Self.round(carbs[key], places: 1, within: 0...3_000),
                 fatG: Self.round(fat[key], places: 1, within: 0...1_000),
-                hrvMs: Self.int(hrv[key], within: 1...300)
+                hrvMs: Self.int(hrv[key], within: 1...300),
+                zone2Min: zone[key].flatMap { $0 > 0 ? min($0, 1_440) : nil }
             ))
             guard let next = cal.date(byAdding: .day, value: 1, to: day) else { break }
             day = next
@@ -177,6 +183,35 @@ final class HealthSync {
             if seconds > 0 { out[key] = seconds / 3600 }
         }
         return out
+    }
+
+    /// Minutes per day with heart rate inside `range` during workouts recorded by a watch
+    /// (Zone 2 walks, runs, bike rides). Time between heart rate readings counts toward the
+    /// reading before it, capped at one minute so gaps in the data don't inflate the total.
+    private func zone2Minutes(start: Date, end: Date, range: ClosedRange<Double>) async -> [String: Int] {
+        guard let hrType = HKQuantityType.quantityType(forIdentifier: .heartRate) else { return [:] }
+        let workoutQuery = HKSampleQueryDescriptor(
+            predicates: [.workout(HKQuery.predicateForSamples(withStart: start, end: end))],
+            sortDescriptors: [SortDescriptor(\.startDate)]
+        )
+        guard let workouts = try? await workoutQuery.result(for: store) else { return [:] }
+        let bpm = HKUnit.count().unitDivided(by: .minute())
+        var seconds: [String: Double] = [:]
+        for workout in workouts {
+            let hrQuery = HKSampleQueryDescriptor(
+                predicates: [.quantitySample(type: hrType, predicate: HKQuery.predicateForSamples(withStart: workout.startDate, end: workout.endDate))],
+                sortDescriptors: [SortDescriptor(\.startDate)]
+            )
+            guard let samples = try? await hrQuery.result(for: store), !samples.isEmpty else { continue }
+            var inZone = 0.0
+            for (i, sample) in samples.enumerated() {
+                let nextStart = i + 1 < samples.count ? samples[i + 1].startDate : workout.endDate
+                let gap = min(max(nextStart.timeIntervalSince(sample.startDate), 0), 60)
+                if range.contains(sample.quantity.doubleValue(for: bpm)) { inZone += gap }
+            }
+            seconds[Self.dayKey(workout.startDate), default: 0] += inZone
+        }
+        return seconds.mapValues { Int(($0 / 60).rounded()) }
     }
 
     // MARK: Helpers

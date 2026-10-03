@@ -567,3 +567,7 @@ span.hk{cursor:default}
 .bub span{display:block;font-size:11px;opacity:.7;margin-top:3px;text-align:right}
 .msgsend{display:flex;gap:8px;align-items:flex-end}
 .msgsend textarea{flex:1;resize:none;font:inherit;font-size:16px;border:1px solid var(--line);border-radius:12px;padding:9px 11px}
+.tw-rem{display:block;margin-top:10px;font-size:13.5px}
+.z2{margin-top:12px;padding-top:10px;border-top:1px solid var(--grid)}
+.z2-top{display:flex;justify-content:space-between;gap:8px;font-size:13px;margin-bottom:6px}
+.z2 .sc-bar{display:block}

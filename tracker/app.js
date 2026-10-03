@@ -121,7 +121,7 @@ const FEEL_KEYS = ["energy", "hunger", "sleep_q", "sleep_hours", "steps", "side_
 const SIDE_EFFECTS = ["Nausea", "Vomiting", "Constipation", "Diarrhea", "Heartburn", "Bloating", "Tired", "Headache", "Dizzy", "Low appetite"];
 const fromCheckinRow = r => ({ id: r.id, clientId: r.client_id, date: r.date, weight: num(r.weight_lb), waist: num(r.waist_in), neck: num(r.neck_in), hip: num(r.hip_in), omron: num(r.omron_bf), photoFront: r.photo_front, photoSide: r.photo_side, note: r.note, energy: num(r.energy), hunger: num(r.hunger), sleepQ: num(r.sleep_q), sleepH: num(r.sleep_hours), steps: num(r.steps), sideEffects: Array.isArray(r.side_effects) ? r.side_effects : [], coachNote: r.coach_note || null, coachNoteAt: r.coach_note_at || null, enteredBy: r.entered_by, createdAt: r.created_at });
 const fromWorkoutRow = r => ({ id: r.id, clientId: r.client_id, date: r.date, dayName: r.day_name || "", entries: Array.isArray(r.entries) ? r.entries : [], note: r.note || "", program: r.program || "", enteredBy: r.entered_by, createdAt: r.created_at });
-const fromHealthRow = r => ({ date: r.date, steps: num(r.steps), sleepH: num(r.sleep_hours), weight: num(r.weight_lb), kcal: num(r.active_kcal), exMin: num(r.exercise_min), rhr: num(r.resting_hr), kcalIn: num(r.kcal_in), protein: num(r.protein_g), carbs: num(r.carbs_g), fat: num(r.fat_g), hrv: num(r.hrv_ms), updatedAt: r.updated_at });
+const fromHealthRow = r => ({ date: r.date, steps: num(r.steps), sleepH: num(r.sleep_hours), weight: num(r.weight_lb), kcal: num(r.active_kcal), exMin: num(r.exercise_min), rhr: num(r.resting_hr), kcalIn: num(r.kcal_in), protein: num(r.protein_g), carbs: num(r.carbs_g), fat: num(r.fat_g), hrv: num(r.hrv_ms), zone2: num(r.zone2_min), updatedAt: r.updated_at });
 const fromMsgRow = r => ({ id: r.id, clientId: r.client_id, fromCoach: !!r.from_coach, body: r.body || "", createdAt: r.created_at, readAt: r.read_at || null });
 const fromTplRow = r => ({ id: r.id, name: r.name, title: r.title || "", notes: r.notes || "", days: Array.isArray(r.days) ? r.days : [], program: r.program && typeof r.program === "object" ? r.program : null });
 const fromPlanRow = r => r ? ({ title: r.title || "", notes: r.notes || "", days: Array.isArray(r.days) ? r.days : [], program: r.program && typeof r.program === "object" ? r.program : null, updatedAt: r.updated_at }) : null;
@@ -188,10 +188,10 @@ function supaApi(sb) {
     async upsertHealth(clientId, rows) {
       /* Values outside the database limits are dropped (not the whole day), so one odd reading never blocks a sync. */
       const rng = (v, lo, hi, int) => { const n = num(v); if (n == null || n < lo || n > hi) return null; return int ? Math.round(n) : n; };
-      const clean = rows.map(r => ({ client_id: clientId, date: r.date, steps: rng(r.steps, 0, 200000, true), sleep_hours: rng(r.sleepHours, 0, 24), weight_lb: rng(r.weightLb, 50, 900), active_kcal: rng(r.activeKcal, 0, 20000, true), exercise_min: rng(r.exerciseMin, 0, 1440, true), resting_hr: rng(r.restingHr, 20, 250, true), kcal_in: rng(r.kcalIn, 0, 20000, true), protein_g: rng(r.proteinG, 0, 2000), carbs_g: rng(r.carbsG, 0, 3000), fat_g: rng(r.fatG, 0, 1000), hrv_ms: rng(r.hrvMs, 1, 300, true), source: "apple_health" }));
+      const clean = rows.map(r => ({ client_id: clientId, date: r.date, steps: rng(r.steps, 0, 200000, true), sleep_hours: rng(r.sleepHours, 0, 24), weight_lb: rng(r.weightLb, 50, 900), active_kcal: rng(r.activeKcal, 0, 20000, true), exercise_min: rng(r.exerciseMin, 0, 1440, true), resting_hr: rng(r.restingHr, 20, 250, true), kcal_in: rng(r.kcalIn, 0, 20000, true), protein_g: rng(r.proteinG, 0, 2000), carbs_g: rng(r.carbsG, 0, 3000), fat_g: rng(r.fatG, 0, 1000), hrv_ms: rng(r.hrvMs, 1, 300, true), zone2_min: rng(r.zone2Min, 0, 1440, true), source: "apple_health" }));
       if (!clean.length) return;
       let res = await sb.from("health_daily").upsert(clean, { onConflict: "client_id,date" });
-      if (res.error && isMissing(res.error)) res = await sb.from("health_daily").upsert(clean.map(({ kcal_in, protein_g, carbs_g, fat_g, hrv_ms, ...r }) => r), { onConflict: "client_id,date" });
+      if (res.error && isMissing(res.error)) res = await sb.from("health_daily").upsert(clean.map(({ kcal_in, protein_g, carbs_g, fat_g, hrv_ms, zone2_min, ...r }) => r), { onConflict: "client_id,date" });
       chk(res);
     },
     async deleteAccount(clientIds) {
@@ -201,6 +201,7 @@ function supaApi(sb) {
       }
       chk(await sb.rpc("delete_my_account"));
     },
+    async claimToken(token, env) { chk(await sb.rpc("claim_device_token", { p_token: token, p_env: env })); },
     async setHabits(clientId, habits) { return fromClientRow(chk(await sb.from("clients").update({ habits }).eq("id", clientId).select().single())); },
     async listHabitLogs(clientId) { return chk(await sb.from("habit_logs").select("date,habit_id").eq("client_id", clientId).gte("date", daysBack(130).pop())).map(r => ({ date: r.date, habitId: r.habit_id })); },
     async toggleHabit(clientId, date, id, on) {
@@ -281,7 +282,7 @@ function demoApi(asClient) {
           : { name: x.name, ref: x.ref, target: `${x.sets} × ${x.reps}`, timed: false, done: true, sets: Array.from({ length: +x.sets || 3 }, (_, si) => ({ lb: [95, 85, 30, 70, 40, 25][k] + wk * (x.kind === "main" ? 10 : 5), reps: Math.max(5, 8 - si) })) }) }); }); }
   /* Sample Apple Health days for the demo client, newest first. */
   const health = Array.from({ length: 21 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - i); const iso = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
-    return { date: iso, steps: 7000 + ((i * 1337) % 4200), sleepH: 6.4 + ((i * 7) % 12) / 10, weight: +(154.6 + i * 0.12).toFixed(1), kcal: 380 + ((i * 53) % 260), exMin: 22 + ((i * 11) % 35), rhr: 61 + (i % 4), hrv: i === 0 ? 54 : 42 + ((i * 7) % 11), kcalIn: i === 0 ? 1180 : 1700 + ((i * 97) % 300), protein: i === 0 ? 96 : 120 + ((i * 7) % 30), carbs: i === 0 ? 104 : 150 + ((i * 13) % 40), fat: i === 0 ? 41 : 55 + ((i * 5) % 15), updatedAt: "2026-10-01T07:30:00Z" }; });
+    return { date: iso, steps: 7000 + ((i * 1337) % 4200), sleepH: 6.4 + ((i * 7) % 12) / 10, weight: +(154.6 + i * 0.12).toFixed(1), kcal: 380 + ((i * 53) % 260), exMin: 22 + ((i * 11) % 35), rhr: 61 + (i % 4), hrv: i === 0 ? 54 : 42 + ((i * 7) % 11), zone2: i % 2 ? 28 + (i % 5) * 2 : 0, kcalIn: i === 0 ? 1180 : 1700 + ((i * 97) % 300), protein: i === 0 ? 96 : 120 + ((i * 7) % 30), carbs: i === 0 ? 104 : 150 + ((i * 13) % 40), fat: i === 0 ? 41 : 55 + ((i * 5) % 15), updatedAt: "2026-10-01T07:30:00Z" }; });
   /* Sample water: today partly done, the last two weeks mostly near goal. */
   const water = Array.from({ length: 14 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - i); return { date: d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()), oz: i === 0 ? 32 : [80, 64, 72, 88, 56, 80, 72, 64, 88, 80, 72, 48, 80][i - 1] }; });
   /* Sample habits and messages. */
@@ -311,7 +312,7 @@ function demoApi(asClient) {
     async deletePlan(id) { await wait(); delete plans[id]; },
     async saveFeedback(eid, note) { await wait(); const e = entries.find(x => x.id === eid); e.coachNote = note || null; e.coachNoteAt = note ? new Date().toISOString() : null; return { ...e }; },
     async listHealth(id) { await wait(); return id === "c1" ? health.slice() : []; },
-    async upsertHealth(id, rows) { await wait(); rows.forEach(r => { const i = health.findIndex(h => h.date === r.date); const h = { date: r.date, steps: r.steps ?? null, sleepH: r.sleepHours ?? null, weight: r.weightLb ?? null, kcal: r.activeKcal ?? null, exMin: r.exerciseMin ?? null, rhr: r.restingHr ?? null, kcalIn: r.kcalIn ?? null, protein: r.proteinG ?? null, carbs: r.carbsG ?? null, fat: r.fatG ?? null, hrv: r.hrvMs ?? null, updatedAt: new Date().toISOString() }; if (i >= 0) health[i] = h; else health.push(h); }); health.sort((a, b) => b.date.localeCompare(a.date)); },
+    async upsertHealth(id, rows) { await wait(); rows.forEach(r => { const i = health.findIndex(h => h.date === r.date); const h = { date: r.date, steps: r.steps ?? null, sleepH: r.sleepHours ?? null, weight: r.weightLb ?? null, kcal: r.activeKcal ?? null, exMin: r.exerciseMin ?? null, rhr: r.restingHr ?? null, kcalIn: r.kcalIn ?? null, protein: r.proteinG ?? null, carbs: r.carbsG ?? null, fat: r.fatG ?? null, hrv: r.hrvMs ?? null, zone2: r.zone2Min ?? null, updatedAt: new Date().toISOString() }; if (i >= 0) health[i] = h; else health.push(h); }); health.sort((a, b) => b.date.localeCompare(a.date)); },
     async deleteAccount() { await wait(); },
     async setHabits(id, habits) { await wait(); const c = clients.find(x => x.id === id); c.habits = habits; return { ...c }; },
     async listHabitLogs(id) { await wait(); return id === "c1" ? habitLogs.map(h => ({ ...h })) : []; },
@@ -707,7 +708,7 @@ function wire(c, s) {
   const on = (sel, fn) => { const el = $(sel); if (el) el.onclick = fn; };
   on("#editClient", () => openClient(c)); on("#newEntry", () => openEntry(c)); on("#firstEntry", () => openEntry(c));
   on("#toggleActive", () => toggleActive(c));
-  on("#openMsgs", () => openMessages(c)); on("#openMsgs2", () => openMessages(c));
+  on("#openMsgs", () => openMessages(c)); on("#openMsgs2", () => openMessages(c)); on("#openRem", openReminders);
   wireHabits(c);
   wireWater(c);
   on("#editPlan", () => openPlan(c)); on("#buildPlan", () => openPlan(c));
@@ -780,6 +781,7 @@ async function loadCheckins() {
     await loadWater();
     await loadHabits();
     await loadMessages();
+    sendReminders();
     const paths = S.checkins.flatMap(e => [e.photoFront, e.photoSide]).filter(p => p && !S.urls[p]);
     if (paths.length) Object.assign(S.urls, await api.photoUrls(paths));
   } catch (err) { console.error(err); toast("Couldn't load check-ins. Check your connection and reload."); }
@@ -794,7 +796,8 @@ async function loadAll() {
   const saved = store.get("fa_client");
   S.sel = S.clients.find(c => c.id === S.sel) ? S.sel : S.clients.find(c => c.id === saved) ? saved : (S.clients[0]?.id || null);
   S.screen = "app";
-  if (!S.isTrainer) toApp({ type: "ready", role: "client" });
+  if (S.isTrainer) toApp({ type: "ready", role: "trainer" });
+  else { const zr = zone2Range(S.clients.find(c => c.id === S.sel) || S.clients[0]); toApp({ type: "ready", role: "client", ...(zr ? { zone2: zr } : {}) }); }
   if (S.isTrainer) { try { S.templates = await api.listTemplates(); } catch (err) { S.templates = []; if (!isMissing(err)) console.error(err); } }
   if (S.isTrainer && S.clients.length && !S.skipOverview) { S.skipOverview = true; await loadOverview(); return; }
   await loadCheckins();
@@ -997,7 +1000,7 @@ function healthCard(c) {
     ${canConnect ? `<button class="btn sm" id="syncHealth" type="button">Sync</button>` : ""}</div>
     <div class="tiles">${big("Avg steps", last7("steps") != null ? Math.round(last7("steps")).toLocaleString("en-US") : null, "/day", "")}${big("Avg sleep", last7("sleepH") != null ? f1(last7("sleepH")) : null, "h", "")}
       ${big("Weight", wNow ? f1(wNow.weight) : null, "lb", wNow && wOld ? `${sgn(wNow.weight - wOld.weight)} lb vs a week earlier` : wNow ? fmtD(wNow.date) : "")}</div>
-    <div class="hk-more">${small("active cal/day", last7("kcal") != null ? Math.round(last7("kcal")) : null)}${small("exercise min/day", last7("exMin") != null ? Math.round(last7("exMin")) : null)}${small("resting HR", last7("rhr") != null ? Math.round(last7("rhr")) + " bpm" : null)}<span class="muted">${wk.length} of 7 days synced</span></div></section>`;
+    <div class="hk-more">${small("active cal/day", last7("kcal") != null ? Math.round(last7("kcal")) : null)}${small("exercise min/day", last7("exMin") != null ? Math.round(last7("exMin")) : null)}${small("resting HR", last7("rhr") != null ? Math.round(last7("rhr")) + " bpm" : null)}<span class="muted">${wk.length} of 7 days synced</span></div>${S.health.some(h => h.zone2 != null) ? (() => { const z = zone2Week(), zr = zone2Range(c); return `<div class="z2"><div class="z2-top"><b>❤️ Zone 2 this week</b><span><b>${z}</b> / 150 min${zr ? ` · ${zr[0]}–${zr[1]} bpm` : ""}</span></div><span class="sc-bar"><span style="width:${Math.min(100, Math.round(z / 150 * 100))}%"></span></span></div>`; })() : ""}</section>`;
 }
 
 /* ---------- water ---------- */
@@ -1083,6 +1086,48 @@ function fuelCard(c) {
     ${top}<div class="fuel-macros">${macro("protein", "Protein", today.protein, c.proteinGoal)}${macro("carbs", "Carbs", today.carbs, c.carbsGoal)}${macro("fat", "Fat", today.fat, c.fatGoal)}</div></section>`;
 }
 
+/* ---------- Zone 2 (same formula as the site's Zone 2 calculator) ---------- */
+/* 60–70% of max heart rate; max = 220 − age (men) or 206 − 0.88 × age (women, Gulati et al. 2010). */
+function zone2Range(c) {
+  if (!c || !c.dob) return null;
+  const age = ageAt(c.dob, todayISO()); if (age == null || age < 13 || age > 100) return null;
+  const max = c.sex === "female" ? 206 - 0.88 * age : 220 - age;
+  return [Math.round(max * 0.6), Math.round(max * 0.7)];
+}
+function zone2Week() { const wk = daysBack(7); return S.health.filter(h => wk.includes(h.date)).reduce((a, h) => a + (h.zone2 || 0), 0); }
+
+/* ---------- push token from the app ---------- */
+window.faAppPush = async data => {
+  if (!data || !data.token || !api || !api.claimToken || DEMO) return;
+  try { await api.claimToken(String(data.token), data.env === "sandbox" ? "sandbox" : "production"); } catch (e) { if (!isMissing(e)) console.error(e); }
+};
+
+/* ---------- workout reminders (scheduled by the iPhone app) ---------- */
+const remKey = () => `rv_rem_${S.sel || ""}`;
+function remSettings() { try { return JSON.parse(store.get(remKey()) || "null") || { on: false, time: "07:00" }; } catch (_) { return { on: false, time: "07:00" }; } }
+/* Tell the app which weekdays have a workout, so it can remind the client that morning. */
+function sendReminders() {
+  if (!IN_APP || S.isTrainer || !S.plan) return;
+  const r = remSettings(), [hh, mm] = String(r.time || "07:00").split(":").map(Number), days = [];
+  S.plan.days.forEach(d => { if (isRestDay(d)) return; const m = String(d.name || "").trim().toLowerCase().match(/^(sun|mon|tue|wed|thu|fri|sat)/); if (!m) return;
+    days.push({ weekday: WEEKDAYS.indexOf(m[1]) + 1, title: `Today: ${shortDay(d.name)} 💪`, body: `${(d.items || []).filter(x => !/zone 2/i.test(x.name)).length} exercises · 45 min of lifting + 30 min Zone 2. Let's go!` }); });
+  toApp({ type: "reminders", enabled: !!r.on && days.length > 0, hour: hh || 0, minute: mm || 0, days });
+}
+function openReminders() {
+  let d = $("#dlgRem"); if (!d) { d = document.createElement("dialog"); d.id = "dlgRem"; document.body.appendChild(d); }
+  const r = remSettings(), scheduled = !!S.plan && S.plan.days.some(x => /^(sun|mon|tue|wed|thu|fri|sat)/i.test(String(x.name || "").trim()));
+  d.innerHTML = `<form method="dialog" novalidate><h3>⏰ Workout reminders</h3>
+    ${IN_APP ? (scheduled ? `<p class="small muted">A notification on each training day in your plan, at the time you pick.</p>
+      <label class="chk"><input type="checkbox" id="remOn"${r.on ? " checked" : ""}> Remind me on workout days</label>
+      <div class="field" style="max-width:180px"><label for="remTime">Time</label><input id="remTime" type="time" value="${esc(r.time || "07:00")}"></div>`
+      : `<p class="small muted">Your plan's days don't have weekdays yet (like "Mon · Upper"). Ask ${esc(TRAINER)} to add them, then reminders can follow your schedule.</p>`)
+      : `<p class="small muted">Reminders work in the RENOVO iPhone app.</p>`}
+    <div class="foot"><span></span><div class="r"><button type="button" class="btn" id="remCancel">Close</button>${IN_APP && scheduled ? `<button type="submit" class="btn primary">Save</button>` : ""}</div></div></form>`;
+  $("#remCancel").onclick = () => d.close();
+  d.querySelector("form").onsubmit = ev => { ev.preventDefault(); const on = $("#remOn")?.checked, time = $("#remTime")?.value || "07:00"; store.set(remKey(), JSON.stringify({ on: !!on, time })); sendReminders(); d.close(); toast(on ? `Reminders on: ${time} on workout days` : "Reminders off"); render(); };
+  d.showModal();
+}
+
 /* ---------- today's workout + missed workouts ---------- */
 const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 /* A plan is "scheduled" when its day names start with weekdays (Mon · Upper A). Returns the day index for a date, -1 for an unscheduled weekday (rest), or null when the plan has no schedule. */
@@ -1117,7 +1162,8 @@ function todayWorkoutCard(c) {
       ${S.workoutsMissing ? "" : `<button type="button" class="btn primary" data-start="${i}">${S.isTrainer ? "Log it" : "Start"}</button>`}</div>`;
   }
   const miss = missed && !doneToday.length ? `<div class="tw-miss">❌ Missed ${toDate(missed.date).toLocaleDateString("en-US", { weekday: "short" })}: ${esc(shortDay(missed.name))}${S.isTrainer ? "" : `. No stress. <button type="button" class="linkbtn" data-start="${missed.i}">Make it up today</button>`}</div>` : "";
-  return `<section class="card tw">${body}${miss}</section>`;
+  const rem = !S.isTrainer && IN_APP ? `<button type="button" class="linkbtn tw-rem" id="openRem">⏰ ${remSettings().on ? `Reminder ${esc(remSettings().time)}` : "Set a workout reminder"}</button>` : "";
+  return `<section class="card tw">${body}${miss}${rem}</section>`;
 }
 
 /* ---------- habits ---------- */
@@ -1126,6 +1172,7 @@ const HABITS = {
   steps8k: { icon: "👟", label: "8,000+ steps", auto: true },
   steps10k: { icon: "👟", label: "10,000+ steps", auto: true },
   sleep7: { icon: "🌙", label: "Sleep 7+ hours", auto: true },
+  zone2: { icon: "❤️", label: "30 min Zone 2", auto: true },
   water: { icon: "💧", label: "Hit my water goal", auto: true },
   protein: { icon: "🥩", label: "Hit my protein goal", auto: true },
   veg: { icon: "🥦", label: "Vegetables with every meal" },
@@ -1152,6 +1199,7 @@ function habitDone(c, h, iso) {
     case "steps8k": return hd.steps == null ? false : hd.steps >= 8000;
     case "steps10k": return hd.steps == null ? false : hd.steps >= 10000;
     case "sleep7": return hd.sleepH == null ? false : hd.sleepH >= 7;
+    case "zone2": return (hd.zone2 || 0) >= 30;
     case "water": return waterOn(iso) >= waterGoal(c);
     case "protein": return !c.proteinGoal || hd.protein == null ? false : hd.protein >= c.proteinGoal * 0.95;
   }
@@ -1160,6 +1208,7 @@ function habitDone(c, h, iso) {
 function habitProgress(c, h) {
   const hd = S.health.find(x => x.date === todayISO()) || {};
   if (h.id === "steps8k" || h.id === "steps10k") return hd.steps != null ? `${hd.steps.toLocaleString("en-US")} / ${h.id === "steps8k" ? "8,000" : "10,000"}` : "From Apple Health";
+  if (h.id === "zone2") return `${hd.zone2 || 0} / 30 min (from your watch)`;
   if (h.id === "sleep7") return hd.sleepH != null ? `${f1(hd.sleepH)} h last night` : "From Apple Health";
   if (h.id === "water") return `${waterOn(todayISO())} / ${waterGoal(c)} oz`;
   if (h.id === "protein") return c.proteinGoal ? `${Math.round(hd.protein || 0)} / ${c.proteinGoal} g` : "Needs a protein target";
@@ -1978,7 +2027,7 @@ function beep() {
 function tickRest() {
   const left = (RT.end - Date.now()) / 1000, box = $("#rTimer");
   if (left <= 0 && !RT.done) {
-    RT.done = true; clearInterval(RT.iv); RT.iv = null;
+    RT.done = true; clearInterval(RT.iv); RT.iv = null; setTimeout(() => toApp({ type: "restStop" }), 4000);
     box.classList.add("done"); $("#rtTime").textContent = "0:00"; $("#rtNext").textContent = "Time's up. Next set!";
     try { navigator.vibrate && navigator.vibrate([250, 120, 250]); } catch (_) {}
     beep(); return;
@@ -1990,6 +2039,7 @@ function tickRest() {
   if (!RT.done) { $("#rtTime").textContent = fmtClock(left); $("#rtBar").style.width = Math.max(0, Math.min(100, left / RT.total * 100)) + "%"; }
 }
 function startRest(sec, next) {
+  toApp({ type: "restStart", seconds: Math.round(sec), next: next || "Next set" });
   // A user gesture is happening right now, so the audio can be unlocked for the beep later.
   try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === "suspended") audioCtx.resume(); } catch (_) {}
   RT.end = Date.now() + sec * 1000; RT.total = sec; RT.done = false; RT.lastTick = null;
@@ -1998,10 +2048,11 @@ function startRest(sec, next) {
   clearInterval(RT.iv); RT.iv = setInterval(tickRest, 250); tickRest();
 }
 function adjustRest(d) {
+  setTimeout(() => { if (!RT.done && RT.iv) toApp({ type: "restStart", seconds: Math.round((RT.end - Date.now()) / 1000), next: $("#rtNext").textContent }); }, 0);
   if (RT.done) { startRest(Math.max(15, d), $("#rtNext").textContent === "Time's up. Next set!" ? "Extra rest" : $("#rtNext").textContent); return; }
   RT.end = Math.max(Date.now() + 1000, RT.end + d * 1000); RT.lastTick = null; RT.total = Math.max(RT.total, (RT.end - Date.now()) / 1000); tickRest();
 }
-function stopRest() { clearInterval(RT.iv); RT.iv = null; RT.done = false; const box = $("#rTimer"); if (box) { box.hidden = true; box.classList.remove("done"); } }
+function stopRest() { toApp({ type: "restStop" }); clearInterval(RT.iv); RT.iv = null; RT.done = false; const box = $("#rTimer"); if (box) { box.hidden = true; box.classList.remove("done"); } }
 $("#rtMinus").onclick = () => adjustRest(-15);
 $("#rtPlus").onclick = () => adjustRest(15);
 $("#rtStop").onclick = stopRest;

@@ -6,6 +6,7 @@ import UIKit
 /// plus Apple Health sync and a weekly check-in reminder.
 @main
 struct RenovoApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var model = AppModel()
 
     init() {

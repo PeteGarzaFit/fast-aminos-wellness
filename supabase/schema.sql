@@ -107,6 +107,16 @@ create table if not exists public.messages (
 create index if not exists messages_client_time on public.messages (client_id, created_at desc);
 create index if not exists messages_sender on public.messages (sender);
 
+-- Push notification tokens for the RENOVO app (added October 2026). One row per phone;
+-- the notify-message Edge Function reads these with the service key to send message alerts.
+create table if not exists public.device_tokens (
+  token      text primary key check (char_length(token) between 32 and 200),
+  user_id    uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  env        text not null default 'production' check (env in ('production', 'sandbox')),
+  updated_at timestamptz not null default now()
+);
+create index if not exists device_tokens_user on public.device_tokens (user_id);
+
 -- Daily water (added October 2026). One row per client per day, in ounces.
 -- water_goal_oz is set by the trainer; when empty the tracker uses half the
 -- client's body weight in ounces.
@@ -185,6 +195,8 @@ alter table public.health_daily add column if not exists kcal_in   integer      
 alter table public.health_daily add column if not exists protein_g numeric(6,1) check (protein_g between 0 and 2000);
 alter table public.health_daily add column if not exists carbs_g   numeric(6,1) check (carbs_g between 0 and 3000);
 alter table public.health_daily add column if not exists fat_g     numeric(6,1) check (fat_g between 0 and 1000);
+-- Minutes in the client's Zone 2 heart rate range during watch workouts (added October 2026).
+alter table public.health_daily add column if not exists zone2_min integer check (zone2_min between 0 and 1440);
 -- Heart rate variability (SDNN, ms), daily average, for recovery scores (added October 2026).
 alter table public.health_daily add column if not exists hrv_ms    integer      check (hrv_ms between 1 and 300);
 alter table public.clients add column if not exists kcal_goal    smallint check (kcal_goal between 800 and 8000);
@@ -390,7 +402,7 @@ grant execute on function private.my_client_ids_any() to authenticated;
 -- ---------- Data API access ----------
 -- New Supabase projects don't expose new tables automatically, so grant
 -- signed-in users access explicitly. Row level security below decides which rows.
-revoke all on public.trainers, public.clients, public.checkins, public.client_plans, public.plan_templates, public.workout_logs, public.health_daily, public.water_daily, public.habit_logs, public.messages from anon;
+revoke all on public.trainers, public.clients, public.checkins, public.client_plans, public.plan_templates, public.workout_logs, public.health_daily, public.water_daily, public.habit_logs, public.messages, public.device_tokens from anon;
 grant select on public.trainers to authenticated;
 grant select, insert, update, delete on public.clients to authenticated;
 grant select, insert, update, delete on public.checkins to authenticated;
@@ -401,6 +413,7 @@ grant select, insert, update, delete on public.health_daily to authenticated;
 grant select, insert, update, delete on public.water_daily to authenticated;
 grant select, insert, update, delete on public.habit_logs to authenticated;
 grant select, insert, update, delete on public.messages to authenticated;
+grant select, insert, update, delete on public.device_tokens to authenticated;
 
 -- ---------- row level security ----------
 alter table public.trainers enable row level security;
@@ -413,6 +426,7 @@ alter table public.health_daily enable row level security;
 alter table public.water_daily enable row level security;
 alter table public.habit_logs enable row level security;
 alter table public.messages enable row level security;
+alter table public.device_tokens enable row level security;
 
 drop policy if exists "trainers read self" on public.trainers;
 create policy "trainers read self" on public.trainers
@@ -567,6 +581,33 @@ create policy "messages mark read" on public.messages
   for update to authenticated
   using ((select private.is_trainer()) or client_id in (select private.my_client_ids()))
   with check ((select private.is_trainer()) or client_id in (select private.my_client_ids()));
+
+-- A phone's token belongs to whoever signed in on it last.
+drop policy if exists "tokens own" on public.device_tokens;
+create policy "tokens own" on public.device_tokens
+  for all to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+create or replace function private.device_tokens_stamp() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  new.user_id := (select auth.uid());
+  new.updated_at := now();
+  return new;
+end $$;
+drop trigger if exists device_tokens_stamp on public.device_tokens;
+create trigger device_tokens_stamp before insert or update on public.device_tokens
+  for each row execute function private.device_tokens_stamp();
+-- When someone else signs in on a phone, the token moves to them.
+create or replace function public.claim_device_token(p_token text, p_env text) returns void
+language plpgsql security definer set search_path = '' as $$
+begin
+  if (select auth.uid()) is null then raise exception 'Not signed in'; end if;
+  insert into public.device_tokens (token, user_id, env, updated_at)
+  values (p_token, (select auth.uid()), case when p_env = 'sandbox' then 'sandbox' else 'production' end, now())
+  on conflict (token) do update set user_id = excluded.user_id, env = excluded.env, updated_at = now();
+end $$;
+revoke all on function public.claim_device_token(text, text) from public, anon;
+grant execute on function public.claim_device_token(text, text) to authenticated;
 
 drop policy if exists "templates trainer only" on public.plan_templates;
 create policy "templates trainer only" on public.plan_templates

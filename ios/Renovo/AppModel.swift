@@ -1,6 +1,7 @@
 import SafariServices
 import SwiftUI
 import UIKit
+import UserNotifications
 import WebKit
 
 /// Owns the web view that shows the tracker, and passes messages between the
@@ -27,6 +28,8 @@ final class AppModel: NSObject, ObservableObject {
     private var clientReady = false
     private var syncing = false
     private var lastSync: Date?
+    /// The client's Zone 2 heart rate range, sent by the page (60–70% of estimated max).
+    private var zone2: ClosedRange<Double>?
 
     // MARK: Web view
 
@@ -79,6 +82,8 @@ final class AppModel: NSObject, ObservableObject {
 
     @MainActor
     func appBecameActive() {
+        LiveRest.endFinished()
+        UNUserNotificationCenter.current().setBadgeCount(0, withCompletionHandler: nil)
         // Refresh Health data when the client comes back to the app, at most every 2 minutes.
         guard clientReady, health.isConnected else { return }
         if let last = lastSync, Date().timeIntervalSince(last) < 2 * 60 { return }   // quick refresh after logging food elsewhere
@@ -92,15 +97,22 @@ final class AppModel: NSObject, ObservableObject {
         guard let type = body["type"] as? String else { return }
         switch type {
         case "ready":
+            // Coach and clients both get message notifications.
+            AppDelegate.onToken = { [weak self] token in self?.sendPushToken(token) }
+            AppDelegate.enablePush()
+            if let token = AppDelegate.token { sendPushToken(token) }
+            if let z = body["zone2"] as? [NSNumber], z.count == 2, z[0].doubleValue < z[1].doubleValue {
+                zone2 = z[0].doubleValue...z[1].doubleValue
+            }
             clientReady = (body["role"] as? String) == "client"
             guard clientReady else { return }
             if health.isConnected {
                 // One-time 90-day backfill for the trend charts, then the last 2 weeks on each open.
                 Task {
-                    // Version 2 added food (MyFitnessPal etc.), version 3 heart rate variability. Apple only asks about new types.
-                    if UserDefaults.standard.integer(forKey: "healthAuthVersion") < 3 {
+                    // Version 2 added food (MyFitnessPal etc.), 3 heart rate variability, 4 workouts + heart rate (Zone 2). Apple only asks about new types.
+                    if UserDefaults.standard.integer(forKey: "healthAuthVersion") < 4 {
                         try? await health.requestAuthorization()
-                        UserDefaults.standard.set(3, forKey: "healthAuthVersion")
+                        UserDefaults.standard.set(4, forKey: "healthAuthVersion")
                         UserDefaults.standard.set(false, forKey: "healthBackfill90")   // pull 90 days of the new data too
                     }
                     let backfilled = UserDefaults.standard.bool(forKey: "healthBackfill90")
@@ -114,6 +126,17 @@ final class AppModel: NSObject, ObservableObject {
             Task { await connectHealth() }
         case "syncHealth":
             Task { await syncNow(days: 90, force: true) }
+        case "reminders":
+            let days = body["days"] as? [[String: Any]] ?? []
+            let hour = (body["hour"] as? NSNumber)?.intValue ?? 7
+            let minute = (body["minute"] as? NSNumber)?.intValue ?? 0
+            let enabled = (body["enabled"] as? NSNumber)?.boolValue ?? false
+            Reminders.scheduleWorkouts(days, hour: hour, minute: minute, enabled: enabled)
+        case "restStart":
+            let seconds = (body["seconds"] as? NSNumber)?.intValue ?? 90
+            LiveRest.start(seconds: seconds, next: (body["next"] as? String) ?? "Next set")
+        case "restStop":
+            LiveRest.stop()
         default:
             break
         }
@@ -128,7 +151,7 @@ final class AppModel: NSObject, ObservableObject {
         do {
             try await health.requestAuthorization()
             health.isConnected = true
-            UserDefaults.standard.set(3, forKey: "healthAuthVersion")
+            UserDefaults.standard.set(4, forKey: "healthAuthVersion")
             await syncNow(days: 90, force: true)
             UserDefaults.standard.set(true, forKey: "healthBackfill90")
             Reminders.requestAndScheduleWeeklyCheckIn()
@@ -144,7 +167,7 @@ final class AppModel: NSObject, ObservableObject {
         syncing = true
         defer { syncing = false }
 
-        let rows = await health.dailyRows(days: days).filter { $0.hasData }
+        let rows = await health.dailyRows(days: days, zone2: zone2).filter { $0.hasData }
         lastSync = Date()
         var payload: [String: Any] = [
             "connected": true,
@@ -155,6 +178,19 @@ final class AppModel: NSObject, ObservableObject {
             payload["error"] = "No Apple Health data found yet. To check what RENOVO can read: Health app > your profile picture > Apps > RENOVO."
         }
         callPage(payload)
+    }
+
+    /// Hands the push token to the page, which saves it for the signed-in person.
+    private func sendPushToken(_ token: String) {
+        #if DEBUG
+        let env = "sandbox"
+        #else
+        let env = "production"
+        #endif
+        let script = "window.faAppPush && window.faAppPush({ token: '\(token)', env: '\(env)' });"
+        DispatchQueue.main.async { [weak self] in
+            self?.webView?.evaluateJavaScript(script, completionHandler: nil)
+        }
     }
 
     /// Calls `window.faAppHealth(payload)` on the page.

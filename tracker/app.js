@@ -1182,9 +1182,9 @@ function tick(final) {
     audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === "suspended") audioCtx.resume();
     const o = audioCtx.createOscillator(), g = audioCtx.createGain(), t = audioCtx.currentTime;
-    /* Phone speakers are loudest around 1–2 kHz, so the ticks sit there and last long enough to hear in a loud gym. */
-    o.type = "square"; o.frequency.value = final ? 1400 : 1100; o.connect(g); g.connect(audioCtx.destination);
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.25, t + 0.01); g.gain.setValueAtTime(0.25, t + 0.14); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2); o.start(t); o.stop(t + 0.22);
+    /* A soft, clear tick around 1 kHz: easy to hear in earbuds without being harsh. */
+    o.type = "sine"; o.frequency.value = final ? 1200 : 1000; o.connect(g); g.connect(audioCtx.destination);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.12, t + 0.01); g.gain.setValueAtTime(0.12, t + 0.1); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16); o.start(t); o.stop(t + 0.18);
   } catch (_) {}
 }
 function beep() {

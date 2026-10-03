@@ -3,80 +3,80 @@
 window.QUICK_WORKOUTS = [
  {
   "id": "arm-blast",
-  "name": "Arm Blast",
+  "name": "Sleeve Stretcher",
   "min": 30,
   "focus": "Arms",
   "where": "gym",
   "level": "All levels",
-  "desc": "Three biceps-and-triceps supersets back to back, then a pump finisher. Fast, brutal, huge pump.",
+  "equip": [
+   "Dumbbells",
+   "Incline bench",
+   "Flat bench",
+   "Cable with rope"
+  ],
+  "desc": "A biceps-and-triceps giant set for 4 rounds (heavy slow reps, then light pump reps), then 100 pushdowns and 100 hammer curls. Pete's own arm day.",
   "items": [
    {
-    "name": "EZ-Bar Curl",
-    "sets": "3",
-    "reps": "10–12",
+    "name": "Incline Neutral DB Curl",
+    "sets": "4",
+    "reps": "6",
     "rest": "none",
-    "note": "Superset A: go straight into pushdowns.",
+    "note": "Palms facing each other. Slow 4-second lowering. Go straight to A2.",
+    "ref": "arms",
+    "ss": "A",
+    "tempo": "4/0/1/0"
+   },
+   {
+    "name": "DB Spider Curl",
+    "sets": "4",
+    "reps": "15",
+    "rest": "none",
+    "note": "Chest on an incline bench, arms hanging straight down. Go straight to A3.",
     "ref": "arms",
     "ss": "A"
    },
    {
-    "name": "Triceps Pushdown",
-    "sets": "3",
-    "reps": "10–12",
-    "rest": "60 sec",
-    "note": "",
+    "name": "Flat Bench DB Skull Crusher",
+    "sets": "4",
+    "reps": "6",
+    "rest": "none",
+    "note": "Lower the dumbbells slowly beside your head. Go straight to A4.",
+    "ref": "arms",
+    "ss": "A",
+    "tempo": "4/0/1/0"
+   },
+   {
+    "name": "Seated DB Overhead Triceps Extension",
+    "sets": "4",
+    "reps": "15",
+    "rest": "90 sec",
+    "note": "Then rest 90 seconds and start the next round at A1.",
     "ref": "arms",
     "ss": "A"
    },
    {
-    "name": "Incline Dumbbell Curl",
-    "sets": "3",
-    "reps": "10–12",
-    "rest": "none",
-    "note": "Superset B: full stretch at the bottom.",
-    "ref": "arms",
-    "ss": "B"
-   },
-   {
-    "name": "Overhead Cable or Dumbbell Triceps Extension",
-    "sets": "3",
-    "reps": "10–12",
-    "rest": "60 sec",
-    "note": "",
-    "ref": "arms",
-    "ss": "B"
-   },
-   {
-    "name": "Hammer Curl",
-    "sets": "3",
-    "reps": "12",
-    "rest": "none",
-    "note": "Superset C.",
-    "ref": "arms",
-    "ss": "C"
-   },
-   {
-    "name": "Close-Grip Push-Up",
-    "sets": "3",
-    "reps": "Near failure",
-    "rest": "60 sec",
-    "note": "",
-    "ref": "arms",
-    "ss": "C"
-   },
-   {
-    "name": "Biceps Curl",
+    "name": "Cable Rope Triceps Pushdown",
     "sets": "1",
-    "reps": "21s",
+    "reps": "100",
     "rest": "",
-    "note": "Finisher: 7 bottom-half reps, 7 top-half, 7 full. Light dumbbells.",
-    "ref": "arms"
+    "note": "100 total reps in as few sets as you can. Log each mini-set with + Add a set.",
+    "ref": "arms",
+    "ss": "B"
+   },
+   {
+    "name": "Cable Rope Hammer Curl",
+    "sets": "1",
+    "reps": "100",
+    "rest": "",
+    "note": "100 total reps in as few sets as you can. Log each mini-set with + Add a set.",
+    "ref": "arms",
+    "ss": "C"
    }
   ]
  },
  {
   "id": "arm-blast-home",
-  "name": "Arm Blast at Home",
+  "name": "Sleeve Stretcher: Home",
   "min": 25,
   "focus": "Arms",
   "where": "home",

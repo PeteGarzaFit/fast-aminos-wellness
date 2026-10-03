@@ -1217,9 +1217,9 @@ function openOD(c, id) {
     const w = OD.sel && odList().find(x => x.id === OD.sel);
     if (w) {
       d.innerHTML = `<div class="od-in"><div class="od-top"><button type="button" class="linkbtn" data-back>← All workouts</button><button type="button" class="linkbtn" data-x>Close</button></div>
-        <div class="kicker">On Demand</div><h3>${esc(w.name)}</h3><p class="muted small od-meta">${odMeta(w)}${w.level ? ` · ${esc(w.level)}` : ""}</p>${w.desc ? `<p class="od-desc">${esc(w.desc)}</p>` : ""}
-        <ol class="plist">${w.items.map(x => { const pics = exPics(x.name, x.ref), sr = [x.sets ? `${esc(x.sets)} × ${esc(x.reps || "")}` : esc(x.reps || ""), x.rest && !noRest(x.rest) ? `rest ${esc(x.rest)}` : ""].filter(Boolean).join(" · ");
-          return `<li${pics ? ` class="haspic"` : ""}>${pics}<div class="ptxt"><div class="pname">${x.ss ? `<span class="sstag">${x.ss === "Circuit" ? "Circuit" : `Superset ${esc(x.ss)}`}</span> ` : ""}${esc(x.name)}</div>${sr ? `<div class="psr">${sr}</div>` : ""}${x.note ? `<div class="pnote">${esc(x.note)}</div>` : ""}</div></li>`; }).join("")}</ol>
+        <div class="kicker">On Demand</div><h3>${esc(w.name)}</h3><p class="muted small od-meta">${odMeta(w)}${w.level ? ` · ${esc(w.level)}` : ""}</p>${w.desc ? `<p class="od-desc">${esc(w.desc)}</p>` : ""}${w.equip ? `<p class="small od-eq"><b>Equipment:</b> ${w.equip.map(esc).join(" · ")}</p>` : ""}${w.items.some(x => x.tempo) ? `<p class="small muted od-eq">Tempo numbers are seconds: lowering / pause at the bottom / lifting / pause at the top. 4/0/1/0 means a slow 4-second lowering and a quick lift.</p>` : ""}
+        <ol class="plist">${w.items.map((x, xi) => { const pics = exPics(x.name, x.ref), sr = [x.sets ? `${esc(x.sets)} × ${esc(x.reps || "")}` : esc(x.reps || ""), esc(tempoTxt(x)), x.rest && !noRest(x.rest) ? `rest ${esc(x.rest)}` : ""].filter(Boolean).join(" · ");
+          return `<li${pics ? ` class="haspic"` : ""}>${pics}<div class="ptxt"><div class="pname">${x.ss ? `<span class="sstag">${esc(ssLabel(w.items, xi))}</span> ` : ""}${esc(x.name)}</div>${sr ? `<div class="psr">${sr}</div>` : ""}${x.note ? `<div class="pnote">${esc(x.note)}</div>` : ""}</div></li>`; }).join("")}</ol>
         <button type="button" class="btn primary wide od-go" data-go>${S.isTrainer ? `Log it for ${esc(firstName(c.name))}` : "Start workout"}</button></div>`;
       return;
     }
@@ -1873,7 +1873,7 @@ function planDays(p) {
   let n = 0;
   return `<div class="days">${p.days.map((d, i) => isRestDay(d) ? `<div class="day rest"><div class="day-h"><span class="dnum">Rest</span><h3>${esc(d.name || "Rest day")}</h3></div>${(d.items || []).map(x => `<p class="small muted" style="margin:4px 0 0">${esc([x.reps, x.note].filter(Boolean).join(". "))}</p>`).join("")}</div>` : `<div class="day"><div class="day-h"><span class="dnum">Day ${++n}</span><h3>${esc(d.name || "Workout")}</h3>${canLog ? `<button type="button" class="btn primary sm startw" data-start="${i}">${S.isTrainer ? "Log workout" : "Start workout"}</button>` : ""}${lastDone(d.name)}</div>
     <ol class="plist">${dayItems(d, p.program, wk).map(x0 => { const x = placeItem(x0, where), u = refUrl(x.ref);
-      const sr = [x.sets ? `${esc(x.sets)} × ${esc(x.reps || "")}` : esc(x.reps || ""), x.rir ? `${esc(x.rir)} in the tank` : "", x.rest ? `rest ${esc(x.rest)}` : ""].filter(Boolean).join(" · ");
+      const sr = [x.sets ? `${esc(x.sets)} × ${esc(x.reps || "")}` : esc(x.reps || ""), esc(tempoTxt(x)), x.rir ? `${esc(x.rir)} in the tank` : "", x.rest ? `rest ${esc(x.rest)}` : ""].filter(Boolean).join(" · ");
       const pics = exPics(x.name, x.ref);
       return `<li${pics ? ` class="haspic"` : ""}>${pics}<div class="ptxt"><div class="pname">${esc(x.name)}${x.kind === "main" ? ` <span class="mtag">Main lift</span>` : ""}</div>${x.gymName ? `<div class="pnote">Home swap for ${esc(x.gymName)}</div>` : ""}${sr ? `<div class="psr">${sr}</div>` : ""}${x.note ? `<div class="pnote">${esc(x.note)}</div>` : ""}${u ? `<a class="plink" href="${u}" target="_blank" rel="noopener">Form tips →</a>` : ""}</div></li>`; }).join("")}</ol></div>`).join("")}</div>`;
 }
@@ -2054,6 +2054,14 @@ function progressHint(x, prev) {
 }
 
 let wDraft = null, wClient = null;
+/* "A1", "A2"… for supersets and giant sets, "B series" for a lone lettered block, "Circuit" for circuits. */
+function ssLabel(items, i) {
+  const ss = items[i] && items[i].ss; if (!ss) return "";
+  if (ss === "Circuit") return "Circuit";
+  const grp = items.map((x, k) => x.ss === ss ? k : -1).filter(k => k >= 0);
+  return grp.length > 1 ? `${ss}${grp.indexOf(i) + 1}` : `${ss} series`;
+}
+const tempoTxt = x => x.tempo ? `tempo ${x.tempo}` : "";
 const noRest = r => /^(none|no rest|0)$/i.test(String(r || "").trim());
 const targetOf = x => [x.sets ? `${x.sets} ×` : "", x.reps || ""].join(" ").trim() + (x.rir ? ` · ${x.rir} in the tank` : "");
 /* One exercise in the logger. Time-logged items (runs, HYROX stations) get min/sec boxes instead of weight × reps. */
@@ -2093,7 +2101,7 @@ function drawWorkout() {
   $("#wList").innerHTML = wDraft.entries.map((e, ei) => {
     const prev = lastFor(e.name), x = e.plan;
     const last = prev ? `<div class="wlast">Last time (${fmtD(prev.w.date)}): <b>${prev.e.sets.filter(logged).map(fmtSet).join(", ")}</b>${prev.e.target && prev.e.target !== e.target ? ` <span class="muted">(${esc(prev.e.target)})</span>` : ""}</div>` : "";
-    const head = `<div class="wex-h"><div class="wgrow">${x.ss ? `<span class="sstag">${x.ss === "Circuit" ? "Circuit" : `Superset ${esc(x.ss)}`}</span>` : ""}<div class="wname">${esc(e.name)}</div><div class="wtarget">Target ${esc(e.target)}${x.rest && !noRest(x.rest) ? ` · rest ${esc(x.rest)}` : noRest(x.rest) ? " · straight to the next move" : ""}</div></div><div class="wex-a">${refUrl(e.ref) ? `<a class="plink" href="${refUrl(e.ref)}" target="_blank" rel="noopener">Form →</a>` : ""}${e.timed || noRest(x.rest) || (e.clock && !String(x.rest || "").trim()) ? "" : `<button type="button" class="restbtn" data-rest="${ei}" aria-label="Start ${fmtClock(restSecs(x.rest))} rest timer">Rest ${fmtClock(restSecs(x.rest))}</button>`}</div></div>${exPics(e.name, e.ref)}`;
+    const head = `<div class="wex-h"><div class="wgrow">${x.ss ? `<span class="sstag">${esc(ssLabel(wDraft.entries.map(z => z.plan), ei))}</span>` : ""}<div class="wname">${esc(e.name)}</div><div class="wtarget">Target ${esc(e.target)}${x.tempo ? ` · tempo ${esc(x.tempo)}` : ""}${x.rest && !noRest(x.rest) ? ` · rest ${esc(x.rest)}` : noRest(x.rest) ? " · straight to the next move" : ""}</div></div><div class="wex-a">${refUrl(e.ref) ? `<a class="plink" href="${refUrl(e.ref)}" target="_blank" rel="noopener">Form →</a>` : ""}${e.timed || noRest(x.rest) || (e.clock && !String(x.rest || "").trim()) ? "" : `<button type="button" class="restbtn" data-rest="${ei}" aria-label="Start ${fmtClock(restSecs(x.rest))} rest timer">Rest ${fmtClock(restSecs(x.rest))}</button>`}</div></div>${exPics(e.name, e.ref)}`;
     if (e.timed) return `<div class="wex">${head}${x.note ? `<div class="pnote">${esc(x.note)}</div>` : ""}<label class="wdone"><input type="checkbox" data-done="${ei}"${e.done ? " checked" : ""}> Done</label></div>`;
     const ph = prev ? prev.e.sets.filter(st => st.lb != null).map(st => st.lb) : [];
     if (e.clock) {

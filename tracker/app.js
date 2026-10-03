@@ -315,7 +315,7 @@ function render() {
   if (S.screen === "paused") { app.innerHTML = pausedScreen(); return; }
   if (!S.clients.length) { app.innerHTML = welcome(); const b = $("#welcomeAdd"); if (b) b.onclick = () => openClient(null); return; }
   const c = client(); const s = series(c, S.checkins);
-  app.innerHTML = `<div class="stack">${head(c, s)}${coachCallout(c)}${healthCard(c)}${waterCard(c)}${tiles(c, s)}${planCard(c)}${workoutsCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div>${RENOVO && !S.isTrainer ? shopCard() : ""}</div>`;
+  app.innerHTML = `<div class="stack">${head(c, s)}${coachCallout(c)}${healthCard(c)}${waterCard(c)}${tiles(c, s)}${s.rows.length ? calNote(c, s) : ""}${planCard(c)}${workoutsCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div>${RENOVO && !S.isTrainer ? shopCard() : ""}</div>`;
   wire(c, s);
 }
 
@@ -444,9 +444,9 @@ function welcome() {
   <li><b>Recalibrate monthly</b>A fresh Omron reading keeps the estimates honest.</li></ol></section>`;
 }
 
-function head(c, s) {
-  const t = todayISO(), age = ageAt(c.dob, t);
-  const bits = [c.sex === "male" ? "Male" : "Female", age != null ? age + " yrs" : null, htStr(c.height)].filter(Boolean).join(" · ");
+/* Omron calibration status + how the estimate works. Sits under the body-composition tiles. */
+function calNote(c, s) {
+  const t = todayISO();
   let pill;
   if (!s.cal.length) pill = `<span class="pill warn">${ICON_WARN}${S.isTrainer ? "Not calibrated. Take an Omron reading at the next gym visit." : "Not calibrated yet. Your next gym check-in sets this up."}</span>`;
   else {
@@ -454,12 +454,17 @@ function head(c, s) {
     pill = ago > 42 ? `<span class="pill warn">${ICON_WARN}${S.isTrainer ? "Recalibrate" : "Gym check-in due"}: last Omron ${ago} days ago</span>`
       : `<span class="pill good">${ICON_OK}Calibrated ${sgn(k.off)} pts · Omron ${ago === 0 ? "today" : ago + " days ago"}</span>`;
   }
-  if (S.isTrainer && !c.active) pill = `<span class="pill warn">${ICON_WARN}Coaching paused. ${esc(firstName(c.name))} can't open the tracker until you resume.</span>`;
+  return `<div class="calnote">${pill}<details class="how"><summary>How the estimate works</summary><p>Each check-in runs the US Navy tape formula on waist, neck${c.sex === "male" ? "" : ", hips"} and height. On gym days the Omron reading is compared with that number and the gap is saved. Home check-ins use the tape number plus the most recent gap. Omron readings swing with water, food and training, so they're taken at the same time of day, before a workout.</p></details></div>`;
+}
+
+function head(c, s) {
+  const t = todayISO(), age = ageAt(c.dob, t);
+  const bits = [c.sex === "male" ? "Male" : "Female", age != null ? age + " yrs" : null, htStr(c.height)].filter(Boolean).join(" · ");
+  const pill = S.isTrainer && !c.active ? `<div><span class="pill warn">${ICON_WARN}Coaching paused. ${esc(firstName(c.name))} can't open the tracker until you resume.</span></div>` : "";
   const linked = S.isTrainer ? (c.userId ? ` · <span title="${esc(c.email)}">Signed in</span>` : ` · <span title="${esc(c.email)}">Hasn't signed in yet</span>`) : "";
   return `<div class="chead"><div class="grow">${S.isTrainer ? "" : `<div class="kicker">Your progress</div>`}<h1>${esc(c.name)}</h1>
-    <div class="meta">${esc(bits)}${c.goal ? ` · Goal: ${esc(c.goal)}` : ""}${linked}</div><div>${pill}</div></div>
-    <div class="actions">${calcLink(c, s)}${S.isTrainer ? `<button class="btn" id="editClient" type="button">Edit client</button><button class="btn${c.active ? "" : " primary"}" id="toggleActive" type="button">${c.active ? "Pause coaching" : "Resume coaching"}</button>` : ""}<button class="btn primary" id="newEntry" type="button">${S.isTrainer ? "New check-in" : "Log check-in"}</button></div></div>
-  <details class="how"><summary>How the estimate works</summary><p>Each check-in runs the US Navy tape formula on waist, neck${c.sex === "male" ? "" : ", hips"} and height. On gym days the Omron reading is compared with that number and the gap is saved. Home check-ins use the tape number plus the most recent gap. Omron readings swing with water, food and training, so they're taken at the same time of day, before a workout.</p></details>`;
+    <div class="meta">${esc(bits)}${c.goal ? ` · Goal: ${esc(c.goal)}` : ""}${linked}</div>${pill}</div>
+    <div class="actions">${calcLink(c, s)}${S.isTrainer ? `<button class="btn" id="editClient" type="button">Edit client</button><button class="btn${c.active ? "" : " primary"}" id="toggleActive" type="button">${c.active ? "Pause coaching" : "Resume coaching"}</button>` : ""}<button class="btn primary" id="newEntry" type="button">${S.isTrainer ? "New check-in" : "Log check-in"}</button></div></div>`;
 }
 
 /* Opens the public calculator pre-filled with this client's latest numbers. */
@@ -858,8 +863,9 @@ function healthCard(c) {
   const ago = synced ? Math.max(0, Math.round((Date.now() - new Date(synced).getTime()) / 36e5)) : null;
   const big = (lbl, v, unit, sub) => `<div class="tile"><span class="lbl">${lbl}</span><span class="big">${v ?? "–"}<small>${v != null ? unit : ""}</small></span><span class="delta">${sub || ""}</span></div>`;
   const small = (lbl, v) => v == null ? "" : `<span><b>${v}</b> ${lbl}</span>`;
-  return `<section class="card hk"><div class="card-h"><div><div class="kicker">From Apple Health</div><h2>Last 7 days</h2></div>
-    <div class="hk-sync">${ago != null ? `<span class="muted small">Synced ${ago < 1 ? "just now" : ago < 24 ? ago + " h ago" : Math.round(ago / 24) + " days ago"}</span>` : ""}${canConnect ? `<button class="btn sm" id="syncHealth" type="button">Sync now</button>` : ""}</div></div>
+  const syncTxt = ago != null ? ` · synced ${ago < 1 ? "just now" : ago < 24 ? ago + " h ago" : Math.round(ago / 24) + " days ago"}` : "";
+  return `<section class="card hk"><div class="card-h"><div><div class="kicker">Apple Health<span class="hk-when">${syncTxt}</span></div><h2>Last 7 days</h2></div>
+    ${canConnect ? `<button class="btn sm" id="syncHealth" type="button">Sync</button>` : ""}</div>
     <div class="tiles">${big("Avg steps", last7("steps") != null ? Math.round(last7("steps")).toLocaleString("en-US") : null, "/day", "")}${big("Avg sleep", last7("sleepH") != null ? f1(last7("sleepH")) : null, "h", "")}
       ${big("Weight", wNow ? f1(wNow.weight) : null, "lb", wNow && wOld ? `${sgn(wNow.weight - wOld.weight)} lb vs a week earlier` : wNow ? fmtD(wNow.date) : "")}</div>
     <div class="hk-more">${small("active cal/day", last7("kcal") != null ? Math.round(last7("kcal")) : null)}${small("exercise min/day", last7("exMin") != null ? Math.round(last7("exMin")) : null)}${small("resting HR", last7("rhr") != null ? Math.round(last7("rhr")) + " bpm" : null)}<span class="muted">${wk.length} of 7 days synced</span></div></section>`;

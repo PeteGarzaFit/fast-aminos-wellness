@@ -60,17 +60,20 @@ final class AppModel: NSObject, ObservableObject {
         #endif
 
         webView = view
-        view.load(URLRequest(url: Self.trackerURL))
+        view.load(Self.freshRequest)
         return view
     }
 
     func reload() {
         loadError = nil
         isLoading = true
-        if let view = webView, view.url != nil { view.reload() } else { webView?.load(URLRequest(url: Self.trackerURL)) }
+        if let view = webView, view.url != nil { view.reloadFromOrigin() } else { webView?.load(Self.freshRequest) }
     }
 
-    @objc private func pullToRefresh() { webView?.reload() }
+    /// Always checks the site for a newer version, so updates show up the next time the app opens.
+    static var freshRequest: URLRequest { URLRequest(url: trackerURL, cachePolicy: .reloadRevalidatingCacheData) }
+
+    @objc private func pullToRefresh() { webView?.reloadFromOrigin() }
 
     // MARK: App lifecycle
 

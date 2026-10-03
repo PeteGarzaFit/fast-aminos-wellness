@@ -315,7 +315,7 @@ function render() {
   if (S.screen === "paused") { app.innerHTML = pausedScreen(); return; }
   if (!S.clients.length) { app.innerHTML = welcome(); const b = $("#welcomeAdd"); if (b) b.onclick = () => openClient(null); return; }
   const c = client(); const s = series(c, S.checkins);
-  app.innerHTML = `<div class="stack">${head(c, s)}${coachCallout(c)}${S.isTrainer ? "" : waterCard(c)}${tiles(c, s)}${planCard(c)}${healthCard(c)}${S.isTrainer ? waterCard(c) : ""}${workoutsCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div>${RENOVO && !S.isTrainer ? shopCard() : ""}</div>`;
+  app.innerHTML = `<div class="stack">${head(c, s)}${coachCallout(c)}${healthCard(c)}${waterCard(c)}${tiles(c, s)}${planCard(c)}${workoutsCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div>${RENOVO && !S.isTrainer ? shopCard() : ""}</div>`;
   wire(c, s);
 }
 

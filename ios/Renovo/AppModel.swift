@@ -36,6 +36,12 @@ final class AppModel: NSObject, ObservableObject {
         config.websiteDataStore = .default()          // keeps the client signed in between launches
         config.applicationNameForUserAgent = "RenovoApp/1.0"
         config.userContentController.add(WeakScriptHandler(self), name: "faApp")
+        // Lock the page at 100% so it feels like an app: no pinch zoom, no zoom when tapping a field.
+        let noZoom = """
+        (function(){var m=document.querySelector('meta[name=viewport]');if(!m){m=document.createElement('meta');m.name='viewport';document.head.appendChild(m);}
+        m.content='width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover';})();
+        """
+        config.userContentController.addUserScript(WKUserScript(source: noZoom, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
 
         let view = WKWebView(frame: .zero, configuration: config)
         view.navigationDelegate = self
@@ -46,6 +52,9 @@ final class AppModel: NSObject, ObservableObject {
         let refresh = UIRefreshControl()
         refresh.addTarget(self, action: #selector(pullToRefresh), for: .valueChanged)
         view.scrollView.refreshControl = refresh
+        view.scrollView.minimumZoomScale = 1
+        view.scrollView.maximumZoomScale = 1
+        view.scrollView.bouncesZoom = false
         #if DEBUG
         if #available(iOS 16.4, *) { view.isInspectable = true }   // Safari > Develop menu while testing
         #endif

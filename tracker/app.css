@@ -345,3 +345,13 @@ td .feelline{display:block;font-size:12px;color:var(--ink-2);margin-top:2px;whit
 .w-btns{display:grid;grid-template-columns:minmax(0,.7fr) minmax(0,1.3fr) minmax(0,1fr);gap:8px;margin-top:12px}
 .w-btns .btn{width:100%;justify-content:center;min-height:46px;font-size:16px}
 .w-btns .btn.sm{min-height:46px}
+
+/* Exercise photos: start and finish on one line */
+.xpics{display:flex;gap:4px;flex:none;text-decoration:none}
+.xpics img{width:64px;height:48px;object-fit:cover;border-radius:8px;background:var(--soft);border:1px solid var(--line);display:block}
+.plist li.haspic{display:flex;gap:12px;align-items:flex-start}
+.plist li.haspic .ptxt{min-width:0;flex:1}
+.wex-h .wgrow{flex:1;min-width:0}
+.wex > .xpics{margin:8px 0 2px}
+.wex > .xpics img{width:96px;height:72px}
+@media (min-width:700px){.xpics img{width:84px;height:63px}}

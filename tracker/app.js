@@ -271,6 +271,7 @@ let VIA_LINK = /access_token|type=(magiclink|signup|recovery|invite)/.test(locat
 const IN_APP = !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.faApp);
 /* RENOVO branding when opened from the RENOVO app (or with ?brand=renovo for previewing). */
 const RENOVO = IN_APP || new URLSearchParams(location.search).get("brand") === "renovo";
+if (IN_APP) { const vp = document.querySelector('meta[name="viewport"]'); if (vp) vp.content = "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"; }
 if (RENOVO) {
   document.documentElement.classList.add("renovo");
   const brand = document.querySelector(".brand"); if (brand) brand.innerHTML = `<span class="rv-logo">RENOVO<span>COACH</span></span>`;
@@ -926,12 +927,21 @@ function coachCallout(c) {
 }
 
 const refUrl = ref => /^[a-z-]+(\/home)?$/.test(ref || "") ? `../workouts/${ref}/` : "";
+/* Start and finish photos side by side for exercises that have them (see tools/build-exercise-images.py). */
+const exStem = name => (window.EXERCISE_IMAGES || {})[String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()] || "";
+function exPics(name, ref) {
+  const st = exStem(name); if (!st) return "";
+  const img = (n, pos) => `<img src="../workouts/img/${st}-${n}.jpg" alt="${esc(name)}, ${pos} position" width="560" height="420" loading="lazy" decoding="async">`;
+  const u = refUrl(ref), inner = img(0, "start") + img(1, "finish");
+  return u ? `<a class="xpics" href="${u}" target="_blank" rel="noopener" aria-label="${esc(name)} form tips">${inner}</a>` : `<div class="xpics">${inner}</div>`;
+}
 function planDays(p) {
   const canLog = !S.workoutsMissing;
   return `<div class="days">${p.days.map((d, i) => `<div class="day"><div class="day-h"><span class="dnum">Day ${i + 1}</span><h3>${esc(d.name || "Workout")}</h3>${canLog ? `<button type="button" class="btn primary sm startw" data-start="${i}">${S.isTrainer ? "Log workout" : "Start workout"}</button>` : ""}${lastDone(d.name)}</div>
     <ol class="plist">${(d.items || []).map(x => { const u = refUrl(x.ref);
       const sr = [x.sets ? `${esc(x.sets)} × ${esc(x.reps || "")}` : esc(x.reps || ""), x.rest ? `rest ${esc(x.rest)}` : ""].filter(Boolean).join(" · ");
-      return `<li><div class="pname">${esc(x.name)}</div>${sr ? `<div class="psr">${sr}</div>` : ""}${x.note ? `<div class="pnote">${esc(x.note)}</div>` : ""}${u ? `<a class="plink" href="${u}" target="_blank" rel="noopener">Form &amp; photos →</a>` : ""}</li>`; }).join("")}</ol></div>`).join("")}</div>`;
+      const pics = exPics(x.name, x.ref);
+      return `<li${pics ? ` class="haspic"` : ""}>${pics}<div class="ptxt"><div class="pname">${esc(x.name)}</div>${sr ? `<div class="psr">${sr}</div>` : ""}${x.note ? `<div class="pnote">${esc(x.note)}</div>` : ""}${u ? `<a class="plink" href="${u}" target="_blank" rel="noopener">Form tips →</a>` : ""}</div></li>`; }).join("")}</ol></div>`).join("")}</div>`;
 }
 function planCard(c) {
   if (S.planMissing) return S.isTrainer ? `<section class="card"><div class="card-h"><h2>Workout plan</h2></div><div class="empty">Workout plans and check-in replies need a one-time database update. Run <code>supabase/schema.sql</code> again in the Supabase SQL Editor, then reload. Steps are in <code>tracker/SETUP.md</code>.</div></section>` : "";
@@ -1107,7 +1117,7 @@ function drawWorkout() {
   $("#wList").innerHTML = wDraft.entries.map((e, ei) => {
     const prev = lastFor(e.name), x = e.plan;
     const last = prev ? `<div class="wlast">Last time (${fmtD(prev.w.date)}): <b>${prev.e.sets.filter(st => st.reps != null).map(fmtSet).join(", ")}</b></div>` : "";
-    const head = `<div class="wex-h"><div><div class="wname">${esc(e.name)}</div><div class="wtarget">Target ${esc(e.target)}${x.rest ? ` · rest ${esc(x.rest)}` : ""}</div></div><div class="wex-a">${refUrl(e.ref) ? `<a class="plink" href="${refUrl(e.ref)}" target="_blank" rel="noopener">Form →</a>` : ""}${e.timed ? "" : `<button type="button" class="restbtn" data-rest="${ei}" aria-label="Start ${fmtClock(restSecs(x.rest))} rest timer">Rest ${fmtClock(restSecs(x.rest))}</button>`}</div></div>`;
+    const head = `<div class="wex-h"><div class="wgrow"><div class="wname">${esc(e.name)}</div><div class="wtarget">Target ${esc(e.target)}${x.rest ? ` · rest ${esc(x.rest)}` : ""}</div></div><div class="wex-a">${refUrl(e.ref) ? `<a class="plink" href="${refUrl(e.ref)}" target="_blank" rel="noopener">Form →</a>` : ""}${e.timed ? "" : `<button type="button" class="restbtn" data-rest="${ei}" aria-label="Start ${fmtClock(restSecs(x.rest))} rest timer">Rest ${fmtClock(restSecs(x.rest))}</button>`}</div></div>${exPics(e.name, e.ref)}`;
     if (e.timed) return `<div class="wex">${head}${x.note ? `<div class="pnote">${esc(x.note)}</div>` : ""}<label class="wdone"><input type="checkbox" data-done="${ei}"${e.done ? " checked" : ""}> Done</label></div>`;
     const ph = prev ? prev.e.sets.filter(st => st.lb != null).map(st => st.lb) : [];
     const rows = e.sets.map((st, si) => `<div class="wset"><span class="snum">Set ${si + 1}</span>

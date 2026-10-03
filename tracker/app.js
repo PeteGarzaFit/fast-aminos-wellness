@@ -1137,6 +1137,17 @@ $("#wList").addEventListener("input", ev => {
   if (t.dataset.k) wDraft.entries[+t.dataset.e].sets[+t.dataset.s][t.dataset.k] = t.value;
   if (t.dataset.done != null) wDraft.entries[+t.dataset.done].done = t.checked;
 });
+/* A weight carries down to the later sets of the same exercise (until you type a different one there). */
+$("#wList").addEventListener("change", ev => {
+  const t = ev.target; if (t.dataset.k !== "lb") return;
+  const ei = +t.dataset.e, si = +t.dataset.s, e = wDraft.entries[ei];
+  e.autoLb = e.autoLb || {}; delete e.autoLb[si];
+  for (let k = si + 1; k < e.sets.length; k++) {
+    if (e.sets[k].lb !== "" && !e.autoLb[k]) break;
+    e.sets[k].lb = t.value; e.autoLb[k] = true;
+    const inp = document.querySelector(`#wList input[data-e="${ei}"][data-s="${k}"][data-k="lb"]`); if (inp) inp.value = t.value;
+  }
+});
 $("#wList").addEventListener("change", ev => {
   const t = ev.target; if (t.dataset.k !== "reps" || t.value === "") return;
   const ei = +t.dataset.e, si = +t.dataset.s, e = wDraft.entries[ei];
@@ -1163,7 +1174,7 @@ $("#wList").addEventListener("keydown", ev => {
   if (next) { next.focus({ preventScroll: true }); next.scrollIntoView({ block: "center", behavior: "smooth" }); } else ev.target.blur();
 });
 $("#wList").addEventListener("click", ev => { const r = ev.target.closest("[data-rest]"); if (r) { const e = wDraft.entries[+r.dataset.rest]; startRest(restSecs(e.plan.rest), `Rest: ${e.name}`); } });
-$("#wList").addEventListener("click", ev => { const b = ev.target.closest("[data-addset]"); if (!b) return; const e = wDraft.entries[+b.dataset.addset]; if (e.sets.length < 12) { e.sets.push({ lb: "", reps: "" }); drawWorkout(); } });
+$("#wList").addEventListener("click", ev => { const b = ev.target.closest("[data-addset]"); if (!b) return; const e = wDraft.entries[+b.dataset.addset]; if (e.sets.length < 12) { const lastLb = e.sets.length ? e.sets[e.sets.length - 1].lb : ""; e.sets.push({ lb: lastLb, reps: "" }); if (lastLb !== "") { e.autoLb = e.autoLb || {}; e.autoLb[e.sets.length - 1] = true; } drawWorkout(); } });
 $("#wCancel").onclick = () => $("#dlgWorkout").close();
 $("#dlgWorkout").addEventListener("close", () => { stopRest(); releaseWake(); });
 $("#fWorkout").onsubmit = async ev => {

@@ -182,6 +182,13 @@ function supaApi(sb) {
       const clean = rows.map(r => ({ client_id: clientId, date: r.date, steps: rng(r.steps, 0, 200000, true), sleep_hours: rng(r.sleepHours, 0, 24), weight_lb: rng(r.weightLb, 50, 900), active_kcal: rng(r.activeKcal, 0, 20000, true), exercise_min: rng(r.exerciseMin, 0, 1440, true), resting_hr: rng(r.restingHr, 20, 250, true), source: "apple_health" }));
       if (clean.length) chk(await sb.from("health_daily").upsert(clean, { onConflict: "client_id,date" }));
     },
+    async deleteAccount(clientIds) {
+      for (const id of clientIds) {
+        const files = (await sb.storage.from(BUCKET).list(id, { limit: 1000 })).data || [];
+        if (files.length) await sb.storage.from(BUCKET).remove(files.map(f => id + "/" + f.name));
+      }
+      chk(await sb.rpc("delete_my_account"));
+    },
     async overview() {
       const since = daysBack(14).pop(), safe = async q => { const { data, error } = await q; if (error) { if (!isMissing(error)) console.error(error); return []; } return data || []; };
       const [checkins, workouts, water, health, plans] = await Promise.all([
@@ -258,6 +265,7 @@ function demoApi(asClient) {
     async saveFeedback(eid, note) { await wait(); const e = entries.find(x => x.id === eid); e.coachNote = note || null; e.coachNoteAt = note ? new Date().toISOString() : null; return { ...e }; },
     async listHealth(id) { await wait(); return id === "c1" ? health.slice() : []; },
     async upsertHealth(id, rows) { await wait(); rows.forEach(r => { const i = health.findIndex(h => h.date === r.date); const h = { date: r.date, steps: r.steps ?? null, sleepH: r.sleepHours ?? null, weight: r.weightLb ?? null, kcal: r.activeKcal ?? null, exMin: r.exerciseMin ?? null, rhr: r.restingHr ?? null, updatedAt: new Date().toISOString() }; if (i >= 0) health[i] = h; else health.push(h); }); health.sort((a, b) => b.date.localeCompare(a.date)); },
+    async deleteAccount() { await wait(); },
     async overview() { await wait();
       return { checkins: entries.map(e => ({ client_id: e.clientId, date: e.date, coach_note: e.coachNote, created_at: e.createdAt, weight_lb: e.weight })),
         workouts: workouts.map(w => ({ client_id: w.clientId, date: w.date, day_name: w.dayName })), water: water.map(w => ({ client_id: "c1", date: w.date, oz: w.oz })),
@@ -327,8 +335,8 @@ function render() {
   if (S.screen === "setup") { app.innerHTML = setupScreen(); return; }
   if (S.screen === "login") { app.innerHTML = loginScreen(); wireLogin(); return; }
   if (S.screen === "password") { app.innerHTML = passwordScreen(); wirePassword(); return; }
-  if (S.screen === "noaccess") { app.innerHTML = noAccessScreen(); return; }
-  if (S.screen === "paused") { app.innerHTML = pausedScreen(); return; }
+  if (S.screen === "noaccess") { app.innerHTML = noAccessScreen() + acctFoot(); const da = $("#delAcct"); if (da) da.onclick = openDeleteAccount; return; }
+  if (S.screen === "paused") { app.innerHTML = pausedScreen() + acctFoot(); const da = $("#delAcct"); if (da) da.onclick = openDeleteAccount; return; }
   if (S.screen === "overview") {
     app.innerHTML = overviewScreen();
     $$("[data-open]").forEach(b => b.onclick = async () => { S.screen = "app"; window.scrollTo(0, 0); await selectClient(b.dataset.open); });
@@ -337,8 +345,9 @@ function render() {
   }
   if (!S.clients.length) { app.innerHTML = welcome(); const b = $("#welcomeAdd"); if (b) b.onclick = () => openClient(null); return; }
   const c = client(); const s = series(c, S.checkins);
-  app.innerHTML = `<div class="stack">${head(c, s)}${coachCallout(c)}${healthCard(c)}${waterCard(c)}${scoreCard(c)}${trendsCard()}${tiles(c, s)}${s.rows.length ? calNote(c, s) : ""}${planCard(c)}${workoutsCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div>${RENOVO && !S.isTrainer ? shopCard() : ""}</div>`;
+  app.innerHTML = `<div class="stack">${head(c, s)}${coachCallout(c)}${healthCard(c)}${waterCard(c)}${scoreCard(c)}${trendsCard()}${tiles(c, s)}${s.rows.length ? calNote(c, s) : ""}${planCard(c)}${workoutsCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div>${RENOVO && !S.isTrainer ? shopCard() : ""}${acctFoot()}</div>`;
   wire(c, s);
+  const da = $("#delAcct"); if (da) da.onclick = openDeleteAccount;
 }
 
 function setupScreen() {
@@ -455,6 +464,38 @@ function pausedScreen() {
   return `<section class="msg"><div class="kicker">Coaching paused</div><h1>Your coaching is paused${c ? `, ${esc(firstName(c.name))}` : ""}</h1>
   <p>Your check-ins, workouts and progress photos are all saved. To pick up where you left off, contact ${esc(TRAINER)} to restart your coaching.</p>
   <p class="small">Once ${esc(TRAINER)} turns your coaching back on, reload this page and everything will be right where you left it.</p></section>`;
+}
+
+/* Apple requires that anyone who can sign in can also delete their account from inside the app. */
+const acctFoot = () => S.isTrainer || DEMO && !DEMO_CLIENT ? "" : `<div class="acct-foot"><button type="button" class="linkbtn danger" id="delAcct">Delete my account</button></div>`;
+function openDeleteAccount() {
+  let d = $("#dlgDelete");
+  if (!d) {
+    d = document.createElement("dialog"); d.id = "dlgDelete";
+    d.innerHTML = `<form method="dialog" novalidate><h3>Delete your account?</h3>
+      <p>This permanently deletes your RENOVO login and everything in it: check-ins, progress photos, workouts, your plan, water and Apple Health data. This can't be undone.</p>
+      <p class="small muted">If you're a coaching client, this doesn't cancel any payment you've made outside the app. Talk to ${esc(TRAINER)} about your coaching.</p>
+      <div class="field"><label for="delConfirm">Type <b>DELETE</b> to confirm</label><input id="delConfirm" type="text" autocomplete="off" autocapitalize="characters"></div>
+      <div class="err" id="delErr"></div>
+      <div class="foot"><span></span><div class="r"><button type="button" class="btn" id="delCancel">Cancel</button><button type="submit" class="btn danger" id="delGo">Delete account</button></div></div></form>`;
+    document.body.appendChild(d);
+    $("#delCancel").onclick = () => d.close();
+    d.querySelector("form").onsubmit = async ev => {
+      ev.preventDefault();
+      if ($("#delConfirm").value.trim().toUpperCase() !== "DELETE") { $("#delErr").textContent = "Type DELETE to confirm."; return; }
+      const b = $("#delGo"); b.disabled = true; b.textContent = "Deleting…"; $("#delErr").textContent = "";
+      try {
+        await api.deleteAccount(S.clients.map(c => c.id));
+        d.close(); toApp({ type: "accountDeleted" });
+        if (DEMO) { toast("Demo only: nothing was deleted."); return; }
+        try { await sb.auth.signOut(); } catch (_) {}
+        S.me = null; currentUser = null; S.screen = "login"; S.authStep = "email"; render();
+        toast("Your account and all your data were deleted.");
+      } catch (e) { console.error(e); $("#delErr").textContent = "Couldn't delete your account. Check your connection and try again, or email info@renovocoach.com."; }
+      b.disabled = false; b.textContent = "Delete account";
+    };
+  }
+  $("#delConfirm").value = ""; $("#delErr").textContent = ""; d.showModal();
 }
 
 function welcome() {

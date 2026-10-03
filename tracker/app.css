@@ -440,3 +440,6 @@ td .feelline{display:block;font-size:12px;color:var(--ink-2);margin-top:2px;whit
 .chip.hot{background:var(--blue);border-color:var(--blue);color:#fff}
 .ov-go{flex:none;font-size:26px;color:var(--faint);line-height:1}
 .ov-note{margin-top:14px}
+
+.acct-foot{text-align:center;padding:18px 0 4px}
+.linkbtn.danger{color:var(--bad);font-size:13px;align-self:center}

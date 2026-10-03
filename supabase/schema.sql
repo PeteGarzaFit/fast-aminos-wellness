@@ -17,6 +17,7 @@
 --     tracker can tell them coaching is paused. Everything else is hidden until
 --     the trainer resumes them.
 --   * Water: each client logs their own; trainers can read it.
+--   * Any client can delete their own account and all their data (delete_my_account).
 --   * Signed-out visitors (anon) can't read or write anything.
 
 create extension if not exists pgcrypto;
@@ -164,6 +165,12 @@ language sql stable security definer set search_path = '' as $$
   select id from public.clients where user_id = (select auth.uid()) and active;
 $$;
 
+-- Every client record of the signed-in user, paused or not (used only for deleting their own photos).
+create or replace function private.my_client_ids_any() returns setof uuid
+language sql stable security definer set search_path = '' as $$
+  select id from public.clients where user_id = (select auth.uid());
+$$;
+
 -- When a client record is created (or its email changes), link it to an
 -- existing login with that email.
 create or replace function private.clients_link_email() returns trigger
@@ -294,6 +301,7 @@ revoke all on all functions in schema private from public, anon, authenticated;
 grant usage on schema private to authenticated;
 grant execute on function private.is_trainer() to authenticated;
 grant execute on function private.my_client_ids() to authenticated;
+grant execute on function private.my_client_ids_any() to authenticated;
 
 -- ---------- Data API access ----------
 -- New Supabase projects don't expose new tables automatically, so grant
@@ -521,8 +529,26 @@ create policy "progress photos delete" on storage.objects
   for delete to authenticated
   using (bucket_id = 'progress-photos' and (
     (select private.is_trainer())
-    or (storage.foldername(name))[1] in (select c::text from private.my_client_ids() as c)
+    or (storage.foldername(name))[1] in (select c::text from private.my_client_ids_any() as c)
   ));
+
+-- ---------- delete my account (required by Apple for apps with sign-in) ----------
+-- A client can permanently delete their own login and everything in it: client
+-- record, check-ins, plan, workouts, Health and water data (all cascade). The
+-- tracker removes their photos first. Coach accounts can't delete themselves here.
+create or replace function public.delete_my_account() returns void
+language plpgsql security definer set search_path = '' as $$
+declare uid uuid := auth.uid();
+begin
+  if uid is null then raise exception 'Not signed in'; end if;
+  if exists (select 1 from public.trainers where user_id = uid) then
+    raise exception 'Coach accounts can''t be deleted from the app. Email info@renovocoach.com.';
+  end if;
+  delete from public.clients where user_id = uid;
+  delete from auth.users where id = uid;
+end $$;
+revoke all on function public.delete_my_account() from public, anon;
+grant execute on function public.delete_my_account() to authenticated;
 
 -- ---------- make yourself the trainer ----------
 -- Sign in to the tracker once with your email, then run this on its own

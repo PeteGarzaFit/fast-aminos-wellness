@@ -518,3 +518,5 @@ fieldset.macros legend{font-size:13px;font-weight:700;padding:0 4px;color:var(--
 .wtoggle button{font-size:14px;padding:6px 12px}
 #wWhere{margin:4px 0 10px;width:100%;display:grid;grid-template-columns:1fr 1fr}
 #wWhere button{padding:8px}
+.day.rest{background:var(--soft);border-style:dashed}
+.day.rest .dnum{color:var(--muted)}

@@ -111,6 +111,9 @@ function summaryText(c, s, forClient) {
 }
 
 /* ---------- data backends ---------- */
+/* Rest days live in a plan as days whose exercises have no sets (e.g. "Wed · Rest"). */
+const isRestDay = d => /(^|·\s*)rest\b/i.test(d && d.name || "") || !(d && d.items || []).some(x => String(x.sets || "").trim());
+const trainDays = days => (Array.isArray(days) ? days : []).filter(d => !isRestDay(d)).length;
 const BUCKET = "progress-photos";
 const fromClientRow = r => ({ id: r.id, userId: r.user_id, email: r.email, name: r.name, sex: r.sex, dob: r.dob, height: num(r.height_in), goal: r.goal, glp1: !!r.on_glp1, active: r.active !== false, waterGoal: num(r.water_goal_oz), kcalGoal: num(r.kcal_goal), proteinGoal: num(r.protein_goal), carbsGoal: num(r.carbs_goal), fatGoal: num(r.fat_goal) });
 const toClientRow = c => ({ email: c.email, name: c.name, sex: c.sex, dob: c.dob || null, height_in: c.height, goal: c.goal || null, on_glp1: !!c.glp1, water_goal_oz: c.waterGoal ?? null, kcal_goal: c.kcalGoal ?? null, protein_goal: c.proteinGoal ?? null, carbs_goal: c.carbsGoal ?? null, fat_goal: c.fatGoal ?? null });
@@ -1157,7 +1160,7 @@ function badgeList(c) {
   // Consistency
   const nW = S.workouts.length;
   [[1, "First workout"], [10, "10 workouts"], [25, "25 workouts"], [50, "50 workouts"], [100, "100 workouts"], [250, "250 workouts"]].forEach(([n, t]) => add("w" + n, "🏋️", t, `Log ${n} workout${n > 1 ? "s" : ""}`, nW, n));
-  const perWeek = S.plan && S.plan.days.length ? Math.min(7, S.plan.days.length) : 3, wk = {};
+  const perWeek = S.plan && trainDays(S.plan.days) ? Math.min(7, trainDays(S.plan.days)) : 3, wk = {};
   S.workouts.forEach(w => { const k = mondayOf(w.date); wk[k] = (wk[k] || 0) + 1; });
   let bestStreak = 0, run = 0, prev = null;
   Object.keys(wk).sort().forEach(k => { if (wk[k] < perWeek) { run = 0; prev = k; return; } run = prev && days(prev, k) === 7 && run ? run + 1 : 1; bestStreak = Math.max(bestStreak, run); prev = k; });
@@ -1207,7 +1210,7 @@ const daysBack = n => { const t = todayISO(); return Array.from({ length: n }, (
 /* Last 7 days, today included. Each part scores 0–1; parts with no data at all are left out so nobody is punished for not having an Apple Watch. */
 function weekScore(c) {
   const wk = daysBack(7), inWk = d => wk.includes(d);
-  const perWeek = S.plan && S.plan.days.length ? Math.min(7, S.plan.days.length) : 0;
+  const perWeek = S.plan && trainDays(S.plan.days) ? Math.min(7, trainDays(S.plan.days)) : 0;
   const done = new Set(S.workouts.filter(w => inWk(w.date)).map(w => w.date + "|" + w.dayName)).size;
   const goal = waterGoal(c), waterDays = wk.filter(d => waterOn(d) >= goal).length;
   const hk = S.health.filter(h => inWk(h.date));
@@ -1285,7 +1288,7 @@ function ovRow(c, o) {
   const ck = o.checkins.filter(x => x.client_id === c.id).sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.created_at).localeCompare(String(a.created_at)));
   const last = ck[0], ago = last ? days(last.date, t) : null;
   const needsReply = !!(last && !last.coach_note && ago <= 14);
-  const plan = o.plans.find(p => p.client_id === c.id), perWeek = plan && Array.isArray(plan.days) ? Math.min(7, plan.days.length) : 0;
+  const plan = o.plans.find(p => p.client_id === c.id), perWeek = plan ? Math.min(7, trainDays(plan.days)) : 0;
   const done = new Set(o.workouts.filter(w => w.client_id === c.id && inWk(w.date)).map(w => w.date + "|" + w.day_name)).size;
   const lw = ck.find(x => x.weight_lb != null)?.weight_lb;
   const goal = c.waterGoal || (lw ? Math.min(128, Math.max(64, Math.round(lw / 2 / 8) * 8)) : 64);
@@ -1416,8 +1419,8 @@ const rirTxt = x => x.rir ? ` · ${x.rir} in the tank` : "";
 function progBar(p) {
   const pr = p.program; if (!pr) return "";
   const wk = progWeek(pr), key = progKey(pr);
-  const done = S.workouts.filter(w => w.program === key).length, total = pr.weeks * (pr.daysPerWeek || p.days.length);
-  if (wk === 0) return `<div class="prog"><div class="prog-top"><b>${esc(pr.name)}</b><span class="muted small">Starts ${fmtD(pr.start)}</span></div><p class="prog-note">${pr.weeks} weeks · ${pr.daysPerWeek || p.days.length} days a week. Week 1 starts ${toDate(pr.start).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}.</p></div>`;
+  const done = S.workouts.filter(w => w.program === key).length, total = pr.weeks * (pr.daysPerWeek || trainDays(p.days));
+  if (wk === 0) return `<div class="prog"><div class="prog-top"><b>${esc(pr.name)}</b><span class="muted small">Starts ${fmtD(pr.start)}</span></div><p class="prog-note">${pr.weeks} weeks · ${pr.daysPerWeek || trainDays(p.days)} days a week. Week 1 starts ${toDate(pr.start).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}.</p></div>`;
   if (wk > pr.weeks) return `<div class="prog done"><div class="prog-top"><b>🏁 ${esc(pr.name)} complete</b><span class="muted small">${done} of ${total} workouts</span></div><p class="prog-note">${S.isTrainer ? "Time to pick the next program." : `Amazing work. ${esc(TRAINER)} will set up your next phase.`}</p></div>`;
   const ph = progPhase(pr, wk);
   return `<div class="prog"><div class="prog-top"><b>Week ${wk} of ${pr.weeks}</b>${ph ? `<span class="prog-ph${ph.deload ? " dl" : ph.peak ? " pk" : ""}">${esc(ph.name)}</span>` : ""}<span class="muted small">${done}/${total} workouts</span></div>
@@ -1427,7 +1430,8 @@ function progBar(p) {
 function planDays(p) {
   const canLog = !S.workoutsMissing;
   const wk = progWeek(p.program), where = getWhere();
-  return `<div class="days">${p.days.map((d, i) => `<div class="day"><div class="day-h"><span class="dnum">Day ${i + 1}</span><h3>${esc(d.name || "Workout")}</h3>${canLog ? `<button type="button" class="btn primary sm startw" data-start="${i}">${S.isTrainer ? "Log workout" : "Start workout"}</button>` : ""}${lastDone(d.name)}</div>
+  let n = 0;
+  return `<div class="days">${p.days.map((d, i) => isRestDay(d) ? `<div class="day rest"><div class="day-h"><span class="dnum">Rest</span><h3>${esc(d.name || "Rest day")}</h3></div>${(d.items || []).map(x => `<p class="small muted" style="margin:4px 0 0">${esc([x.reps, x.note].filter(Boolean).join(". "))}</p>`).join("")}</div>` : `<div class="day"><div class="day-h"><span class="dnum">Day ${++n}</span><h3>${esc(d.name || "Workout")}</h3>${canLog ? `<button type="button" class="btn primary sm startw" data-start="${i}">${S.isTrainer ? "Log workout" : "Start workout"}</button>` : ""}${lastDone(d.name)}</div>
     <ol class="plist">${(d.items || []).map(x0 => { const x = placeItem(itemForWeek(x0, p.program, wk), where), u = refUrl(x.ref);
       const sr = [x.sets ? `${esc(x.sets)} × ${esc(x.reps || "")}` : esc(x.reps || ""), x.rir ? `${esc(x.rir)} in the tank` : "", x.rest ? `rest ${esc(x.rest)}` : ""].filter(Boolean).join(" · ");
       const pics = exPics(x.name, x.ref);
@@ -1566,7 +1570,7 @@ $("#fPlan").onsubmit = async ev => {
   const days = cleanDays();
   if (!days.length) { err.textContent = "Add at least one exercise."; return; }
   if (draft.program && !/^\d{4}-\d{2}-\d{2}$/.test(draft.program.start || "")) { err.textContent = "Pick a start date for the program."; return; }
-  const p = { title: draft.title.trim(), notes: draft.notes.trim(), days, program: draft.program ? { ...draft.program, daysPerWeek: draft.program.daysPerWeek || days.length } : null };
+  const p = { title: draft.title.trim(), notes: draft.notes.trim(), days, program: draft.program ? { ...draft.program, daysPerWeek: draft.program.daysPerWeek || trainDays(days) } : null };
   const btn = $("#plSave"); btn.disabled = true; btn.textContent = "Saving…"; err.textContent = "";
   try { S.plan = await api.savePlan(planClient.id, p); $("#dlgPlan").close(); toast(`Plan saved. ${firstName(planClient.name)} will see it next time they open the tracker.`); render(); }
   catch (e) { console.error(e); err.textContent = isMissing(e) ? "Run the database update in tracker/SETUP.md first." : "Couldn't save. Check your connection and try again."; }
@@ -1782,7 +1786,7 @@ function workoutsCard(c) {
   const ws = S.workouts;
   if (!ws.length) return S.plan && S.plan.days.length ? `<section class="card"><div class="card-h"><h2>Workouts</h2></div><div class="empty">${S.isTrainer ? `No workouts logged yet. ${esc(firstName(c.name))} taps <b>Start workout</b> on a plan day to log sets and reps.` : `Tap <b>Start workout</b> on a day in your plan to log your sets and reps. Next time you'll see what to beat.`}</div></section>` : "";
   const t = todayISO(), recent = ws.filter(w => days(w.date, t) < 28).length;
-  const target = S.plan ? S.plan.days.length * 4 : null;
+  const target = S.plan ? trainDays(S.plan.days) * 4 : null;
   // strength: best weight per exercise, first session vs latest
   const by = {};
   [...ws].reverse().forEach(w => w.entries.forEach(e => { if (e.timed) return; const best = Math.max(...e.sets.map(st => st.lb ?? -1)); if (best <= 0) return; (by[e.name] ||= []).push({ date: w.date, best }); }));

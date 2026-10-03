@@ -946,8 +946,8 @@ function feelLine(e) {
 
 /* Fast Aminos Wellness links inside the RENOVO app. */
 function shopCard() {
-  return `<section class="card fa"><div><div class="kicker">Fuel your progress</div><h2>Fast Aminos Wellness</h2><p class="small muted">Supplements and free tools from ${esc(TRAINER)}'s wellness shop.</p></div>
-    <div class="fa-links"><a class="btn" href="https://fast-aminos-wellness.plyamed.com/shop/supplements" target="_blank" rel="noopener">Shop supplements</a><a class="btn" href="../workouts/" target="_blank" rel="noopener">Workout library</a><a class="btn" href="../zone2/" target="_blank" rel="noopener">Zone 2 calculator</a></div></section>`;
+  return `<section class="card fa"><div><div class="kicker">Fuel your progress</div><h2>Fast Aminos Wellness</h2><p class="small muted">Supplements, telehealth and free tools from ${esc(TRAINER)}'s wellness site.</p></div>
+    <div class="fa-links"><a class="btn primary" href="https://fastaminoswellness.com/" target="_blank" rel="noopener">Shop supplements</a><a class="btn" href="../workouts/" target="_blank" rel="noopener">Workout library</a><a class="btn" href="../zone2/" target="_blank" rel="noopener">Zone 2 calculator</a></div></section>`;
 }
 
 /* ---------- Apple Health (via the RENOVO iPhone app) ---------- */

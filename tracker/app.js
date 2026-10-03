@@ -385,6 +385,7 @@ function renderBar() {
 /* ---------- screens ---------- */
 function render() {
   renderBar();
+  if (S.screen !== "app" || S.isTrainer) { $("#tabbar")?.remove(); document.body.classList.remove("has-tabs"); }
   const app = $("#app");
   if (S.screen === "loading") { app.innerHTML = `<div class="skel"></div>`; return; }
   if (S.screen === "setup") { app.innerHTML = setupScreen(); return; }
@@ -400,9 +401,10 @@ function render() {
   }
   if (!S.clients.length) { app.innerHTML = welcome(); const b = $("#welcomeAdd"); if (b) b.onclick = () => openClient(null); return; }
   const c = client(); const s = series(c, S.checkins);
-  app.innerHTML = `<div class="stack">${head(c, s)}${todayCard(c)}${scoreCard(c)}${msgBanner(c)}${coachCallout(c)}${todayWorkoutCard(c)}${habitsCard(c)}${healthCard(c)}${waterCard(c)}${fuelCard(c)}${trendsCard()}${tiles(c, s)}${s.rows.length ? calNote(c, s) : ""}${planCard(c)}${strengthCard()}${badgesCard(c)}${workoutsCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div>${RENOVO && !S.isTrainer ? shopCard() : ""}${acctFoot()}</div>`;
+  app.innerHTML = `<div class="stack">${head(c, s)}${weekStrip(c)}${todayCard(c)}${scoreCard(c)}${msgBanner(c)}${coachCallout(c)}${todayWorkoutCard(c)}${habitsCard(c)}${healthCard(c)}${waterCard(c)}${fuelCard(c)}${trendsCard()}${tiles(c, s)}${s.rows.length ? calNote(c, s) : ""}${planCard(c)}${strengthCard()}${badgesCard(c)}${workoutsCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div>${RENOVO && !S.isTrainer ? shopCard() : ""}${acctFoot()}</div>`;
   wire(c, s);
   const da = $("#delAcct"); if (da) da.onclick = openDeleteAccount;
+  drawTabBar(c);
 }
 
 function setupScreen() {
@@ -716,6 +718,7 @@ function wire(c, s) {
   on("#connectHealth", () => { const b = $("#connectHealth"); b.disabled = true; b.textContent = "Waiting for Apple Health…"; toApp({ type: "connectHealth" }); });
   on("#syncHealth", () => { const b = $("#syncHealth"); b.disabled = true; b.textContent = "Syncing…"; toApp({ type: "syncHealth" }); });
   $$("[data-start]").forEach(b => b.onclick = () => openWorkout(c, +b.dataset.start));
+  $$("[data-wk]").forEach(b => b.onclick = () => weekTap(c, b.dataset.wk));
   $$("[data-delw]").forEach(btn => btn.onclick = async () => {
     if (!btn.classList.contains("armed")) { btn.classList.add("armed"); btn.textContent = "Confirm"; setTimeout(() => { if (btn.isConnected) { btn.classList.remove("armed"); btn.textContent = "Delete"; } }, 4000); return; }
     btn.disabled = true;
@@ -1145,6 +1148,102 @@ function missedDays(p, workouts, n) {
   const out = [], logged = new Set(workouts.map(w => w.date)), start = planStart(p);
   daysBack(n + 1).slice(1).forEach(d => { if (d < start) return; const i = planDayFor(p, d); if (i == null || i < 0 || isRestDay(p.days[i])) return; if (!logged.has(d)) out.push({ date: d, i, name: p.days[i].name }); });
   return out;
+}
+/* ---------- this week at a glance (Mon–Sun) ---------- */
+function weekDays() {
+  const t = toDate(todayISO()), mon = new Date(t); mon.setDate(t.getDate() - ((t.getDay() + 6) % 7));
+  return Array.from({ length: 7 }, (_, i) => { const d = new Date(mon); d.setDate(mon.getDate() + i); return isoOf(d); });
+}
+/* Status of one calendar day against the plan: done, missed, today, planned, rest. */
+function dayStatus(p, iso) {
+  const t = todayISO(), i = planDayFor(p, iso), done = S.workouts.find(w => w.date === iso);
+  if (done) return { st: "done", i, w: done };
+  if (i == null || i < 0 || isRestDay(p.days[i])) return { st: "rest", i };
+  if (iso === t) return { st: "today", i };
+  if (iso < t && iso >= planStart(p)) return { st: "missed", i };
+  return { st: iso < t ? "rest" : "planned", i };
+}
+/* Planned workouts done in a row, counting back from the most recent one (rest days don't break it). */
+function workoutStreak(p) {
+  let n = 0;
+  for (const d of daysBack(120)) {
+    const x = dayStatus(p, d);
+    if (x.st === "done") { if (x.i != null && x.i >= 0 && !isRestDay(p.days[x.i])) n++; continue; }
+    if (x.st === "today" || x.st === "rest") continue;
+    if (x.st === "missed") break;
+  }
+  return n;
+}
+function weekStrip(c) {
+  const p = S.plan; if (!p || !p.days.length || S.workoutsMissing || planDayFor(p, todayISO()) == null) return "";
+  const days = weekDays(), t = todayISO(), xs = days.map(d => ({ d, ...dayStatus(p, d) }));
+  const planned = xs.filter(x => x.st !== "rest" || x.w).length, done = xs.filter(x => x.st === "done").length, streak = workoutStreak(p);
+  const ic = { done: "✓", missed: "✕", today: "", planned: "", rest: "" };
+  const cells = xs.map(x => { const dt = toDate(x.d);
+    const nm = x.i != null && x.i >= 0 ? shortDay(p.days[x.i].name) : "Rest";
+    return `<button type="button" class="wk-d ${x.st}${x.d === t ? " now" : ""}" data-wk="${x.d}" aria-label="${dt.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}: ${esc(x.st === "done" ? "done" : x.st === "missed" ? "missed, " + nm : nm)}">
+      <span class="wk-n">${dt.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase()}</span><span class="wk-dot">${ic[x.st]}</span><span class="wk-date">${dt.getDate()}</span></button>`; }).join("");
+  return `<section class="card wk"><div class="wk-row">${cells}</div>
+    <div class="wk-foot"><span>${streak >= 2 ? `🔥 <b>${streak}</b> workouts in a row` : "Every workout counts"}</span><span class="muted">${done} of ${planned} this week</span></div></section>`;
+}
+function weekTap(c, iso) {
+  const p = S.plan, x = dayStatus(p, iso), dt = toDate(iso).toLocaleDateString("en-US", { weekday: "long" });
+  if (x.st === "done") return toast(`${dt}: ${shortDay(x.w.dayName)} done ✓`);
+  if (x.st === "rest") return toast(`${dt}: rest day`);
+  if (S.workoutsMissing) return;
+  if (x.st === "planned") return toast(`${dt}: ${shortDay(p.days[x.i].name)} · ${dayItems(p.days[x.i], p.program, progWeek(p.program)).length} exercises`);
+  openWorkout(c, x.i);
+}
+
+/* ---------- phone tab bar (clients) ---------- */
+const TABS = [
+  { k: "home", ic: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h5v-6h4v6h5V9.5"/></svg>', t: "Home" },
+  { k: "workout", ic: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 7v10M3.5 9.5v5M18 7v10M20.5 9.5v5M6 12h12"/></svg>', t: "Workout" },
+  { k: "progress", ic: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19h16"/><path d="m5 15 4.5-4.5 3.5 3L19 7"/><path d="M15 7h4v4"/></svg>', t: "Progress" },
+  { k: "msgs", ic: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12Z"/></svg>', t: "Messages" },
+  { k: "more", ic: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg>', t: "More" },
+];
+function scrollToEl(el) { if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - (($(".bar") || {}).offsetHeight || 0) - 12, behavior: "smooth" }); }
+function tabTarget(k) {
+  if (k === "workout") return $(".card.tw") || $(".card.plan");
+  if (k === "progress") return $(".card.trends") || $(".card.strength") || $(".tiles");
+  return null;
+}
+function drawTabBar(c) {
+  let bar = $("#tabbar");
+  if (S.isTrainer || S.screen !== "app") { if (bar) bar.remove(); document.body.classList.remove("has-tabs"); return; }
+  if (!bar) { bar = document.createElement("nav"); bar.id = "tabbar"; bar.className = "tabbar"; bar.setAttribute("aria-label", "Sections"); document.body.appendChild(bar); }
+  document.body.classList.add("has-tabs");
+  const n = S.msgsMissing ? 0 : unreadFor(S.msgs);
+  bar.innerHTML = TABS.filter(x => x.k !== "msgs" || !S.msgsMissing).map(x => `<button type="button" data-tab="${x.k}"${x.k === "home" ? ` class="on"` : ""}><span class="tb-ic">${x.ic}${x.k === "msgs" && n ? `<i>${n}</i>` : ""}</span><span>${x.t}</span></button>`).join("");
+  bar.onclick = ev => { const b = ev.target.closest("[data-tab]"); if (!b) return; const k = b.dataset.tab;
+    if (k === "home") return window.scrollTo({ top: 0, behavior: "smooth" });
+    if (k === "msgs") return openMessages(c);
+    if (k === "more") return openMore(c);
+    const el = tabTarget(k); if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - (($(".bar") || {}).offsetHeight || 0) - 12, behavior: "smooth" }); };
+  tabSpy();
+}
+function tabSpy() {
+  const bar = $("#tabbar"); if (!bar) return;
+  const y = window.scrollY + (($(".bar") || {}).offsetHeight || 0) + 40, w = tabTarget("workout"), pr = tabTarget("progress");
+  const pos = el => el ? el.getBoundingClientRect().top + window.scrollY : Infinity;
+  const k = y >= pos(pr) && pos(pr) > pos(w) ? "progress" : y >= pos(w) ? (y >= pos(pr) ? "progress" : "workout") : "home";
+  $$("#tabbar [data-tab]").forEach(b => b.classList.toggle("on", b.dataset.tab === k));
+}
+window.addEventListener("scroll", () => requestAnimationFrame(tabSpy), { passive: true });
+function openMore(c) {
+  const d = $("#dlgMore") || document.body.appendChild(Object.assign(document.createElement("dialog"), { id: "dlgMore", className: "sheet" }));
+  const items = [
+    [`📝`, S.isTrainer ? "New check-in" : "Log check-in", () => $("#newEntry")?.click()],
+    ...(IN_APP ? [[`⏰`, "Workout reminder", () => openReminders()]] : []),
+    [`🏆`, "Badges & strength", () => { scrollToEl($(".card.badges") || $(".card.strength")); }],
+    [`📸`, "Photos & check-in history", () => { scrollToEl($(".split")); }],
+    ...(RENOVO ? [[`🛒`, "Shop supplements", () => window.open("https://fastaminoswellness.com/", "_blank", "noopener")]] : []),
+    [`👤`, "Account", () => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" })],
+  ];
+  d.innerHTML = `<div class="sheet-h"><b>More</b><button type="button" class="linkbtn" data-x>Close</button></div><div class="sheet-l">${items.map((x, i) => `<button type="button" data-m="${i}"><span>${x[0]}</span>${esc(x[1])}</button>`).join("")}</div>`;
+  d.onclick = ev => { if (ev.target === d || ev.target.closest("[data-x]")) return d.close(); const b = ev.target.closest("[data-m]"); if (b) { d.close(); items[+b.dataset.m][2](); } };
+  d.showModal();
 }
 const shortDay = n => String(n || "").replace(/^(sun|mon|tue|wed|thu|fri|sat)[a-z]*\s*·\s*/i, "").replace(/\s*\(.*?\)\s*/g, " ").trim() || String(n || "");
 function todayWorkoutCard(c) {

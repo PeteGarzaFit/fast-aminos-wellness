@@ -575,3 +575,37 @@ span.hk{cursor:default}
 .z2{margin-top:12px;padding-top:10px;border-top:1px solid var(--grid)}
 .z2-top{display:flex;justify-content:space-between;gap:8px;font-size:13px;margin-bottom:6px}
 .z2 .sc-bar{display:block}
+
+/* This week at a glance */
+.card.wk{padding:12px 12px 10px}
+.wk-row{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}
+.wk-d{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 0 7px;border:1px solid var(--line);border-radius:12px;background:var(--white);font:inherit;color:var(--ink-2);cursor:pointer;min-width:0}
+.wk-n{font-size:10.5px;font-weight:700;letter-spacing:.04em;color:var(--muted)}
+.wk-date{font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
+.wk-dot{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:800;border:2px solid var(--blue-soft);color:#fff}
+.wk-d.planned .wk-dot,.wk-d.today .wk-dot{border-color:var(--blue)}
+.wk-d.done .wk-dot{background:var(--blue);border-color:var(--blue)}
+.wk-d.missed .wk-dot{border-color:var(--bad);color:var(--bad)}
+.wk-d.rest .wk-dot{border:0;background:var(--grid);width:8px;height:8px;margin:6px 0}
+.wk-d.now{border:2px solid var(--blue);background:var(--blue-soft)}
+.wk-d.now .wk-n{color:var(--blue)}
+.wk-foot{display:flex;justify-content:space-between;gap:8px;margin-top:9px;padding:0 2px;font-size:13px}
+
+/* Phone tab bar for clients */
+.tabbar{display:none}
+@media (max-width:820px){
+  body.has-tabs{padding-bottom:calc(68px + env(safe-area-inset-bottom,0px))}
+  body.has-tabs .toast{bottom:calc(80px + env(safe-area-inset-bottom,0px))}
+  .tabbar{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;position:fixed;left:0;right:0;bottom:0;z-index:40;background:rgba(255,255,255,.96);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-top:1px solid var(--line);padding:6px 4px calc(6px + env(safe-area-inset-bottom,0px))}
+  .tabbar button{display:flex;flex-direction:column;align-items:center;gap:2px;border:0;background:none;font:inherit;font-size:11px;font-weight:650;color:var(--muted);padding:4px 0;cursor:pointer}
+  .tabbar .tb-ic{position:relative;display:block;height:24px}
+  .tabbar button.on{color:var(--blue)}
+    .tabbar .tb-ic i{position:absolute;top:-4px;right:-12px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:var(--bad);color:#fff;font-size:10.5px;font-style:normal;font-weight:800;line-height:17px}
+}
+.sheet{border:0;border-radius:18px;padding:0;width:min(440px,calc(100vw - 24px));margin:auto auto 12px;box-shadow:0 20px 50px rgba(16,24,40,.3)}
+.sheet::backdrop{background:rgba(16,24,40,.35)}
+.sheet-h{display:flex;justify-content:space-between;align-items:center;padding:14px 16px 6px;font-size:17px}
+.sheet-l{display:flex;flex-direction:column;padding:4px 8px 12px}
+.sheet-l button{display:flex;align-items:center;gap:12px;padding:13px 10px;border:0;background:none;font:inherit;font-size:16px;font-weight:600;color:var(--ink);text-align:left;border-radius:10px;cursor:pointer}
+.sheet-l button:hover{background:var(--soft)}
+.sheet-l button span{font-size:20px;width:26px;text-align:center}

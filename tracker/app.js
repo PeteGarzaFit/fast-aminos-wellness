@@ -921,7 +921,8 @@ function healthCard(c) {
   const has = S.health.length > 0;
   const canConnect = IN_APP && !S.isTrainer;
   if (!has && !canConnect) return "";
-  if (!has) return `<section class="card"><div class="card-h"><h2>Apple Health</h2></div><div class="empty">Connect Apple Health and your steps, sleep and weight fill in automatically. You choose exactly what to share. <button class="btn primary sm" id="connectHealth" type="button">Connect Apple Health</button></div></section>`;
+  if (!has) return `<section class="card"><div class="card-h"><h2>Apple Health</h2></div><div class="empty">Connect Apple Health and your steps, sleep and weight fill in automatically. You choose exactly what to share. <button class="btn primary sm" id="connectHealth" type="button">Connect Apple Health</button>
+    <p class="small muted" style="margin:10px 0 0"><b>Wear a Garmin, Fitbit, Oura or WHOOP?</b> Turn on Apple Health sharing in that watch's app first (Garmin Connect: <i>More → Settings → Connected Apps → Apple Health</i>). RENOVO picks it up from there.</p></div></section>`;
   const t = todayISO(), wk = S.health.filter(h => days(h.date, t) >= 0 && days(h.date, t) < 7);
   const wts = S.health.filter(h => h.weight != null);
   const wNow = wts[0], wOld = wts.find(h => days(h.date, wNow?.date || t) >= 7);

@@ -104,6 +104,7 @@ create table if not exists public.messages (
   created_at timestamptz not null default now(),
   read_at    timestamptz
 );
+alter table public.messages add column if not exists pushed_at timestamptz;
 create index if not exists messages_client_time on public.messages (client_id, created_at desc);
 create index if not exists messages_sender on public.messages (sender);
 
@@ -380,16 +381,43 @@ begin
     new.from_coach := private.is_trainer();
     new.created_at := now();
     new.read_at := null;
+    new.pushed_at := null;
   else
     if old.sender = (select auth.uid()) then raise exception 'You can''t edit a sent message'; end if;
     new.id := old.id; new.client_id := old.client_id; new.sender := old.sender;
     new.from_coach := old.from_coach; new.body := old.body; new.created_at := old.created_at;
+    -- Only the push sender (server side, no signed-in user) marks a message as pushed.
+    if (select auth.uid()) is not null then new.pushed_at := old.pushed_at; end if;
   end if;
   return new;
 end $$;
 drop trigger if exists messages_guard on public.messages;
 create trigger messages_guard before insert or update on public.messages
   for each row execute function private.messages_guard();
+
+-- Push notifications: each new message asks the notify-message Edge Function to buzz the
+-- other person's phone. The function looks the message up itself and sends each one once,
+-- so it needs no key. If the call fails, the message still sends.
+create or replace function private.messages_push() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  perform net.http_post(
+    url := 'https://zfkhkdkibuwpigpvsmkd.supabase.co/functions/v1/notify-message',
+    body := jsonb_build_object('message_id', new.id),
+    headers := '{"Content-Type": "application/json"}'::jsonb
+  );
+  return new;
+exception when others then
+  return new;
+end $$;
+do $$ begin
+  if exists (select 1 from pg_available_extensions where name = 'pg_net') then
+    create extension if not exists pg_net with schema extensions;
+    drop trigger if exists messages_push on public.messages;
+    create trigger messages_push after insert on public.messages
+      for each row execute function private.messages_push();
+  end if;
+end $$;
 
 -- Only signed-in users may run the two lookup helpers (policies need them).
 -- Nobody calls the trigger functions directly.

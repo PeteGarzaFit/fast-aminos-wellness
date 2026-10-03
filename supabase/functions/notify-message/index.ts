@@ -1,5 +1,7 @@
 // RENOVO: sends an iPhone notification when a new message is saved.
-// Triggered by a Supabase Database Webhook on INSERT into public.messages.
+// Called by a database trigger (private.messages_push in schema.sql) with {message_id}.
+// Deploy with "Enforce JWT verification" OFF: the function trusts nothing in the request
+// except the id, reads the message itself, and pushes each message only once.
 // Secrets (Supabase > Edge Functions > Secrets): APNS_KEY_ID, APNS_TEAM_ID, APNS_PRIVATE_KEY (the .p8 file contents).
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided by Supabase automatically.
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -30,10 +32,17 @@ async function apnsJwt(): Promise<string> {
 
 Deno.serve(async (req) => {
   try {
-    const payload = await req.json();
-    const msg = payload?.record;
-    if (payload?.type !== "INSERT" || !msg?.client_id) return new Response("ignored");
+    const payload = await req.json().catch(() => ({}));
+    const id = String(payload?.message_id ?? payload?.record?.id ?? "");
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return new Response("ignored");
     const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+    // Claim the message: only new (last 5 minutes), not-yet-pushed messages go out.
+    const since = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const { data: msg } = await db.from("messages").update({ pushed_at: new Date().toISOString() })
+      .eq("id", id).is("pushed_at", null).gte("created_at", since)
+      .select("client_id, from_coach, body").maybeSingle();
+    if (!msg) return new Response("already sent or not found");
 
     const { data: client } = await db.from("clients").select("user_id, name").eq("id", msg.client_id).single();
     if (!client) return new Response("no client");

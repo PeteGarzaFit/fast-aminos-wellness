@@ -680,22 +680,56 @@ function logCard(c, s) {
   <div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Wt lb</th><th>Waist</th><th>Neck</th>${fem ? "<th>Hips</th>" : ""}<th>Tape %</th><th>Omron %</th><th>Body fat %</th><th>Lean lb</th><th><span hidden>Actions</span></th></tr></thead><tbody>${tr}</tbody></table></div></section>`;
 }
 
+/* Per-pair alignment of the "after" photo over the "before" photo (moves in % of the frame, size as a scale). */
+const alKey = (pa, pb) => `rv_align_${pa}|${pb}`;
+function getAlign(pa, pb) { try { return JSON.parse(store.get(alKey(pa, pb)) || "null") || { x: 0, y: 0, s: 1 }; } catch (_) { return { x: 0, y: 0, s: 1 }; } }
+function setAlign(pa, pb, v) { store.set(alKey(pa, pb), JSON.stringify(v)); }
+function wireAlign(s) {
+  const tg = $("#alToggle"), gt = $("#gridToggle");
+  if (tg) tg.onclick = () => { S.aligning = true; S.grid = true; if (S.fade === 50 || S.fade > 60) S.fade = 50; render(); $("#phAlign")?.scrollIntoView({ block: "center", behavior: "smooth" }); };
+  if (gt) gt.onclick = () => { S.grid = !S.grid; render(); };
+  const box = $("#phAlign"); if (!box || !S.aligning) return;
+  const withP = s.rows.filter(r => r.e.photoFront || r.e.photoSide), key = S.view === "front" ? "photoFront" : "photoSide";
+  const A = withP.find(r => r.e.id === S.cmpA).e, B = withP.find(r => r.e.id === S.cmpB).e, top = box.querySelector("img.top");
+  let al = getAlign(A[key], B[key]);
+  const apply = () => { if (top) top.style.transform = `translate(${al.x}%,${al.y}%) scale(${al.s})`; };
+  let drag = null;
+  box.onpointerdown = ev => { drag = { x: ev.clientX, y: ev.clientY, ax: al.x, ay: al.y }; box.setPointerCapture(ev.pointerId); ev.preventDefault(); };
+  box.onpointermove = ev => { if (!drag) return; const r = box.getBoundingClientRect();
+    al = { ...al, x: Math.max(-40, Math.min(40, drag.ax + (ev.clientX - drag.x) / r.width * 100)), y: Math.max(-40, Math.min(40, drag.ay + (ev.clientY - drag.y) / r.height * 100)) }; apply(); };
+  box.onpointerup = box.onpointercancel = () => { if (drag) setAlign(A[key], B[key], al); drag = null; };
+  const sz = $("#alS"); if (sz) sz.oninput = () => { al = { ...al, s: +sz.value / 100 }; apply(); setAlign(A[key], B[key], al); };
+  const rs = $("#alReset"); if (rs) rs.onclick = () => { al = { x: 0, y: 0, s: 1 }; setAlign(A[key], B[key], al); apply(); if (sz) sz.value = 100; };
+  const dn = $("#alDone"); if (dn) dn.onclick = () => { S.aligning = false; render(); toast("Photos lined up. Side by side and overlay both use this."); };
+}
 function photoCard(s) {
   const withP = s.rows.filter(r => r.e.photoFront || r.e.photoSide);
   let body;
   if (!withP.length) body = `<div class="empty">Add front and side photos at a check-in to compare them here. Same wall, same light, same distance.</div>`;
   else {
     const key = S.view === "front" ? "photoFront" : "photoSide";
-    if (!withP.find(r => r.e.id === S.cmpA)) S.cmpA = withP[0].e.id;
-    if (!withP.find(r => r.e.id === S.cmpB)) S.cmpB = withP[withP.length - 1].e.id;
+    // Default: first photo vs newest photo. A new check-in moves "After" to it unless you picked one yourself.
+    const ids = withP.map(r => r.e.id);
+    if (S.cmpN !== ids.length) { if (!S.cmpPickedB || !ids.includes(S.cmpB)) S.cmpB = ids[ids.length - 1]; S.cmpN = ids.length; }
+    if (!ids.includes(S.cmpA)) S.cmpA = ids[0];
+    if (!ids.includes(S.cmpB)) S.cmpB = ids[ids.length - 1];
+    if (S.cmpA === S.cmpB && ids.length > 1 && !S.cmpPickedB) { S.cmpA = ids[0]; S.cmpB = ids[ids.length - 1]; }
     const A = withP.find(r => r.e.id === S.cmpA).e, Bx = withP.find(r => r.e.id === S.cmpB).e;
-    const opt = sel => withP.map(r => `<option value="${esc(r.e.id)}"${r.e.id === sel ? " selected" : ""}>${fmtD(r.e.date, true)}</option>`).join("");
+    const lbl = r => { const same = withP.filter(x => x.e.date === r.e.date); return fmtD(r.e.date, true) + (same.length > 1 ? ` (#${same.indexOf(r) + 1})` : ""); };
+    const opt = sel => withP.map(r => `<option value="${esc(r.e.id)}"${r.e.id === sel ? " selected" : ""}>${esc(lbl(r))}</option>`).join("");
     const src = e => e[key] && S.urls[e[key]];
-    const img = (e, cls) => src(e) ? `<img${cls ? ` class="${cls}"` : ""} src="${esc(src(e))}" alt="${S.view} photo, ${fmtD(e.date, true)}"${cls === "top" ? ` style="opacity:${S.fade / 100}"` : ""}>` : (cls ? "" : `No ${S.view} photo`);
+    const al = getAlign(A[key], Bx[key]), tf = `transform:translate(${al.x}%,${al.y}%) scale(${al.s})`;
+    const img = (e, cls) => src(e) ? `<img${cls ? ` class="${cls}"` : ""} src="${esc(src(e))}" alt="${S.view} photo, ${fmtD(e.date, true)}"${cls === "top" ? ` style="opacity:${S.fade / 100};${tf}"` : cls === "after" ? ` style="${tf}"` : ""} draggable="false">` : (cls && cls !== "after" ? "" : `No ${S.view} photo`);
+    const grid = S.grid ? `<div class="phgrid" aria-hidden="true"></div>` : "";
+    const alignBar = S.aligning ? `<div class="alignbar"><p class="small muted">Drag the photo to line it up. Use the slider to match the size. The ${fmtD(Bx.date)} photo moves; ${fmtD(A.date)} stays put.</p>
+        <label class="small muted" for="alS">Size</label><input class="range" id="alS" type="range" min="70" max="140" step="1" value="${Math.round(al.s * 100)}">
+        <div class="alignbtns"><button type="button" class="btn sm" id="alReset">Reset</button><button type="button" class="btn sm primary" id="alDone">Done</button></div></div>` : "";
+    const tools = `<div class="phtools"><button type="button" class="linkbtn" id="alToggle">${S.aligning ? "" : "↔ Align photos"}</button><button type="button" class="linkbtn" id="gridToggle">${S.grid ? "Hide grid" : "# Grid"}</button></div>`;
     body = `<div class="picks"><label for="cmpA">Before<select id="cmpA">${opt(S.cmpA)}</select></label><label for="cmpB">After<select id="cmpB">${opt(S.cmpB)}</select></label></div>
-    ${S.overlay ? `<div class="ph" style="max-width:340px;margin:0 auto">${img(A, "base") || `No ${S.view} photo`}${img(Bx, "top")}</div>
+    ${S.overlay || S.aligning ? `<div class="ph${S.aligning ? " aligning" : ""}" id="phAlign" style="max-width:340px;margin:0 auto">${img(A, "base") || `No ${S.view} photo`}${img(Bx, "top")}${grid}</div>
       <label class="small muted" for="fade" style="display:block;margin-top:8px">Blend: ${fmtD(A.date)} ↔ ${fmtD(Bx.date)}</label><input class="range" id="fade" type="range" min="0" max="100" value="${S.fade}">`
-    : `<div class="cmp"><figure><div class="ph">${img(A)}</div><figcaption>${fmtD(A.date, true)}</figcaption></figure><figure><div class="ph">${img(Bx)}</div><figcaption>${fmtD(Bx.date, true)}</figcaption></figure></div>`}`;
+    : `<div class="cmp"><figure><div class="ph">${img(A)}${grid}</div><figcaption>${esc(lbl(withP.find(r => r.e === A)))}</figcaption></figure><figure><div class="ph">${img(Bx, "after")}${grid}</div><figcaption>${esc(lbl(withP.find(r => r.e === Bx)))}</figcaption></figure></div>`}
+    ${alignBar}${src(A) && src(Bx) && A !== Bx ? tools : ""}`;
   }
   const ctl = withP.length ? `<div class="seg" role="group" aria-label="Photo view"><button type="button" data-view="front" aria-pressed="${S.view === "front"}">Front</button><button type="button" data-view="side" aria-pressed="${S.view === "side"}">Side</button></div><div class="seg" role="group" aria-label="Compare mode"><button type="button" data-ov="0" aria-pressed="${!S.overlay}">Side by side</button><button type="button" data-ov="1" aria-pressed="${S.overlay}">Overlay</button></div>` : "";
   return `<section class="card"><div class="card-h"><h2>Photos</h2>${ctl}</div>${body}</section>`;
@@ -734,7 +768,8 @@ function wire(c, s) {
   $$("[data-tspan]").forEach(b => b.onclick = () => { S.trendSpan = +b.dataset.tspan; const card = document.querySelector(".trends"); if (card) { card.outerHTML = trendsCard(); wire(c, s); } });
   $$("[data-view]").forEach(b => b.onclick = () => { S.view = b.dataset.view; render(); });
   $$("[data-ov]").forEach(b => b.onclick = () => { S.overlay = b.dataset.ov === "1"; render(); });
-  const a = $("#cmpA"), b = $("#cmpB"); if (a) a.onchange = () => { S.cmpA = a.value; render(); }; if (b) b.onchange = () => { S.cmpB = b.value; render(); };
+  const a = $("#cmpA"), b = $("#cmpB"); if (a) a.onchange = () => { S.cmpA = a.value; render(); }; if (b) b.onchange = () => { S.cmpB = b.value; S.cmpPickedB = true; render(); };
+  wireAlign(s);
   const fd = $("#fade"); if (fd) fd.oninput = () => { S.fade = +fd.value; const t = document.querySelector(".ph img.top"); if (t) t.style.opacity = S.fade / 100; };
   $$("[data-del]").forEach(btn => btn.onclick = async () => {
     if (!btn.classList.contains("armed")) { btn.classList.add("armed"); btn.textContent = "Confirm"; setTimeout(() => { if (btn.isConnected) { btn.classList.remove("armed"); btn.textContent = "Delete"; } }, 4000); return; }
@@ -773,7 +808,7 @@ async function toggleActive(c) {
 
 /* ---------- loading data ---------- */
 async function selectClient(id) {
-  S.sel = id; S.cmpA = S.cmpB = null; if (S.isTrainer) store.set("fa_client", id);
+  S.sel = id; S.cmpA = S.cmpB = null; S.cmpN = null; S.cmpPickedB = false; S.aligning = false; if (S.isTrainer) store.set("fa_client", id);
   await loadCheckins();
 }
 async function loadCheckins() {

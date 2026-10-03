@@ -182,6 +182,16 @@ function supaApi(sb) {
       const clean = rows.map(r => ({ client_id: clientId, date: r.date, steps: rng(r.steps, 0, 200000, true), sleep_hours: rng(r.sleepHours, 0, 24), weight_lb: rng(r.weightLb, 50, 900), active_kcal: rng(r.activeKcal, 0, 20000, true), exercise_min: rng(r.exerciseMin, 0, 1440, true), resting_hr: rng(r.restingHr, 20, 250, true), source: "apple_health" }));
       if (clean.length) chk(await sb.from("health_daily").upsert(clean, { onConflict: "client_id,date" }));
     },
+    async overview() {
+      const since = daysBack(14).pop(), safe = async q => { const { data, error } = await q; if (error) { if (!isMissing(error)) console.error(error); return []; } return data || []; };
+      const [checkins, workouts, water, health, plans] = await Promise.all([
+        safe(sb.from("checkins").select("client_id,date,coach_note,created_at,weight_lb").gte("date", daysBack(120).pop()).order("date", { ascending: false }).limit(3000)),
+        safe(sb.from("workout_logs").select("client_id,date,day_name").gte("date", since)),
+        safe(sb.from("water_daily").select("client_id,date,oz").gte("date", since)),
+        safe(sb.from("health_daily").select("client_id,date,steps,sleep_hours").gte("date", since)),
+        safe(sb.from("client_plans").select("client_id,days"))]);
+      return { checkins, workouts, water, health, plans };
+    },
     async listWater(clientId) { return chk(await sb.from("water_daily").select("date,oz").eq("client_id", clientId).order("date", { ascending: false }).limit(60)).map(r => ({ date: r.date, oz: num(r.oz) || 0 })); },
     async setWater(clientId, date, oz) { chk(await sb.from("water_daily").upsert({ client_id: clientId, date, oz }, { onConflict: "client_id,date" })); },
     async listWorkouts(clientId) { return chk(await sb.from("workout_logs").select("*").eq("client_id", clientId).order("date", { ascending: false }).order("created_at", { ascending: false }).limit(300)).map(fromWorkoutRow); },
@@ -248,6 +258,10 @@ function demoApi(asClient) {
     async saveFeedback(eid, note) { await wait(); const e = entries.find(x => x.id === eid); e.coachNote = note || null; e.coachNoteAt = note ? new Date().toISOString() : null; return { ...e }; },
     async listHealth(id) { await wait(); return id === "c1" ? health.slice() : []; },
     async upsertHealth(id, rows) { await wait(); rows.forEach(r => { const i = health.findIndex(h => h.date === r.date); const h = { date: r.date, steps: r.steps ?? null, sleepH: r.sleepHours ?? null, weight: r.weightLb ?? null, kcal: r.activeKcal ?? null, exMin: r.exerciseMin ?? null, rhr: r.restingHr ?? null, updatedAt: new Date().toISOString() }; if (i >= 0) health[i] = h; else health.push(h); }); health.sort((a, b) => b.date.localeCompare(a.date)); },
+    async overview() { await wait();
+      return { checkins: entries.map(e => ({ client_id: e.clientId, date: e.date, coach_note: e.coachNote, created_at: e.createdAt, weight_lb: e.weight })),
+        workouts: workouts.map(w => ({ client_id: w.clientId, date: w.date, day_name: w.dayName })), water: water.map(w => ({ client_id: "c1", date: w.date, oz: w.oz })),
+        health: health.map(h => ({ client_id: "c1", date: h.date, steps: h.steps, sleep_hours: h.sleepH })), plans: Object.entries(plans).map(([k, v]) => ({ client_id: k, days: v.days })) }; },
     async listWater(id) { await wait(); return id === "c1" ? water.map(w => ({ ...w })) : []; },
     async setWater(id, date, oz) { await wait(); const w = water.find(x => x.date === date); if (w) w.oz = oz; else { water.push({ date, oz }); water.sort((a, b) => b.date.localeCompare(a.date)); } },
     async listWorkouts(id) { await wait(); return workouts.filter(w => w.clientId === id).sort((a, b) => b.date.localeCompare(a.date) || String(b.createdAt).localeCompare(String(a.createdAt))).map(w => JSON.parse(JSON.stringify(w))); },
@@ -288,17 +302,19 @@ const canDelete = e => S.isTrainer || (S.me && e.enteredBy === S.me.id);
 /* ---------- header ---------- */
 function renderBar() {
   const el = $("#barRight");
-  if (S.screen !== "app" && S.screen !== "noaccess" && S.screen !== "paused") { el.innerHTML = ""; return; }
+  if (!["app", "noaccess", "paused", "overview"].includes(S.screen)) { el.innerHTML = ""; return; }
   let h = "";
   if (S.screen === "app" && S.isTrainer && S.clients.length) {
     const opts = S.clients.map(c => `<option value="${esc(c.id)}"${c.id === S.sel ? " selected" : ""}>${esc(c.name)}${c.active ? "" : " (paused)"}</option>`).join("");
     h += `<label class="small muted" for="clientPick" hidden>Client</label><select id="clientPick" aria-label="Client">${opts}</select>`;
   }
-  if (S.screen === "app" && S.isTrainer) h += `<button class="btn" id="addClient" type="button">Add client</button>`;
+  if (S.screen === "app" && S.isTrainer) h += `<button class="btn" id="allClients" type="button">All clients</button>`;
+  if (S.screen === "overview" && S.isTrainer) h += `<button class="btn" id="addClient" type="button">Add client</button>`;
   h += `<span class="who" title="${esc(S.me?.email)}">${esc(S.me?.email)}</span>${DEMO ? "" : `<button class="btn ghost sm" id="changePw" type="button">Password</button>`}<button class="btn ghost sm" id="signOut" type="button">${DEMO ? "Exit demo" : "Sign out"}</button>`;
   el.innerHTML = h;
   const p = $("#clientPick"); if (p) p.onchange = () => selectClient(p.value);
   const a = $("#addClient"); if (a) a.onclick = () => openClient(null);
+  const ac = $("#allClients"); if (ac) ac.onclick = () => { window.scrollTo(0, 0); loadOverview(); };
   $("#signOut").onclick = signOut;
   const cp = $("#changePw"); if (cp) cp.onclick = () => { S.pwBack = S.screen; S.pwMode = "change"; S.screen = "password"; render(); };
 }
@@ -313,9 +329,15 @@ function render() {
   if (S.screen === "password") { app.innerHTML = passwordScreen(); wirePassword(); return; }
   if (S.screen === "noaccess") { app.innerHTML = noAccessScreen(); return; }
   if (S.screen === "paused") { app.innerHTML = pausedScreen(); return; }
+  if (S.screen === "overview") {
+    app.innerHTML = overviewScreen();
+    $$("[data-open]").forEach(b => b.onclick = async () => { S.screen = "app"; window.scrollTo(0, 0); await selectClient(b.dataset.open); });
+    const w = $("#welcomeAdd"); if (w) w.onclick = () => openClient(null);
+    return;
+  }
   if (!S.clients.length) { app.innerHTML = welcome(); const b = $("#welcomeAdd"); if (b) b.onclick = () => openClient(null); return; }
   const c = client(); const s = series(c, S.checkins);
-  app.innerHTML = `<div class="stack">${head(c, s)}${coachCallout(c)}${healthCard(c)}${waterCard(c)}${tiles(c, s)}${s.rows.length ? calNote(c, s) : ""}${planCard(c)}${workoutsCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div>${RENOVO && !S.isTrainer ? shopCard() : ""}</div>`;
+  app.innerHTML = `<div class="stack">${head(c, s)}${coachCallout(c)}${healthCard(c)}${waterCard(c)}${scoreCard(c)}${trendsCard()}${tiles(c, s)}${s.rows.length ? calNote(c, s) : ""}${planCard(c)}${workoutsCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div>${RENOVO && !S.isTrainer ? shopCard() : ""}</div>`;
   wire(c, s);
 }
 
@@ -604,6 +626,8 @@ function wire(c, s) {
   });
   $$("[data-reply]").forEach(b => b.onclick = () => openReply(c, S.checkins.find(x => x.id === b.dataset.reply)));
   $$("[data-metric]").forEach(b => b.onclick = () => { S.metric = b.dataset.metric; render(); });
+  $$("[data-trend]").forEach(b => b.onclick = () => { S.trend = b.dataset.trend; const card = document.querySelector(".trends"); if (card) { card.outerHTML = trendsCard(); wire(c, s); } });
+  $$("[data-tspan]").forEach(b => b.onclick = () => { S.trendSpan = +b.dataset.tspan; const card = document.querySelector(".trends"); if (card) { card.outerHTML = trendsCard(); wire(c, s); } });
   $$("[data-view]").forEach(b => b.onclick = () => { S.view = b.dataset.view; render(); });
   $$("[data-ov]").forEach(b => b.onclick = () => { S.overlay = b.dataset.ov === "1"; render(); });
   const a = $("#cmpA"), b = $("#cmpB"); if (a) a.onchange = () => { S.cmpA = a.value; render(); }; if (b) b.onchange = () => { S.cmpB = b.value; render(); };
@@ -672,6 +696,7 @@ async function loadAll() {
   S.screen = "app";
   if (!S.isTrainer) toApp({ type: "ready", role: "client" });
   if (S.isTrainer) { try { S.templates = await api.listTemplates(); } catch (err) { S.templates = []; if (!isMissing(err)) console.error(err); } }
+  if (S.isTrainer && S.clients.length && !S.skipOverview) { S.skipOverview = true; await loadOverview(); return; }
   await loadCheckins();
 }
 
@@ -917,6 +942,125 @@ function wireWater(c) {
   });
 }
 
+/* ---------- weekly score + trends ---------- */
+const isoOf = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+const daysBack = n => { const t = todayISO(); return Array.from({ length: n }, (_, i) => { const d = toDate(t); d.setDate(d.getDate() - i); return isoOf(d); }); };
+/* Last 7 days, today included. Each part scores 0–1; parts with no data at all are left out so nobody is punished for not having an Apple Watch. */
+function weekScore(c) {
+  const wk = daysBack(7), inWk = d => wk.includes(d);
+  const perWeek = S.plan && S.plan.days.length ? Math.min(7, S.plan.days.length) : 0;
+  const done = new Set(S.workouts.filter(w => inWk(w.date)).map(w => w.date + "|" + w.dayName)).size;
+  const goal = waterGoal(c), waterDays = wk.filter(d => waterOn(d) >= goal).length;
+  const hk = S.health.filter(h => inWk(h.date));
+  const stepsAvg = avg(hk.map(h => h.steps)), sleepAvg = avg(hk.map(h => h.sleepH));
+  const parts = [];
+  if (perWeek) parts.push({ k: "Workouts", w: 35, v: Math.min(1, done / perWeek), txt: `${done} of ${perWeek}` });
+  if (!S.waterMissing) parts.push({ k: "Water goal", w: 25, v: waterDays / 7, txt: `${waterDays} of 7 days` });
+  if (stepsAvg != null) parts.push({ k: "Steps", w: 20, v: Math.min(1, stepsAvg / 8000), txt: `${Math.round(stepsAvg).toLocaleString("en-US")}/day` });
+  if (sleepAvg != null) parts.push({ k: "Sleep", w: 20, v: Math.min(1, sleepAvg / 7), txt: `${f1(sleepAvg)} h/night` });
+  const tw = parts.reduce((a, p) => a + p.w, 0);
+  return { parts, score: tw ? Math.round(parts.reduce((a, p) => a + p.w * p.v, 0) / tw * 100) : null };
+}
+function ring(pct, size) {
+  const r = 42, C = 2 * Math.PI * r, off = C * (1 - Math.max(0, Math.min(100, pct)) / 100);
+  return `<svg class="ring" viewBox="0 0 100 100" width="${size}" height="${size}" aria-hidden="true"><circle cx="50" cy="50" r="${r}" fill="none" stroke="var(--blue-soft)" stroke-width="11"/>
+    <circle cx="50" cy="50" r="${r}" fill="none" stroke="url(#ringg)" stroke-width="11" stroke-linecap="round" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" transform="rotate(-90 50 50)"/>
+    <defs><linearGradient id="ringg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5fb0ff"/><stop offset="1" stop-color="var(--blue)"/></linearGradient></defs>
+    <text x="50" y="57" text-anchor="middle" font-size="26" font-weight="800" fill="var(--ink)">${pct}</text></svg>`;
+}
+function scoreCard(c) {
+  const { parts, score } = weekScore(c);
+  if (score == null) return "";
+  const msg = score >= 85 ? "Crushing it this week." : score >= 65 ? "Solid week. Keep it rolling." : score >= 40 ? "Good start. A couple more wins this week." : "Every day counts. Let's get one win today.";
+  return `<section class="card score"><div class="sc-ring">${ring(score, 92)}</div><div class="sc-body"><div class="kicker">Weekly score</div><div class="sc-msg">${S.isTrainer ? `${esc(firstName(c.name))}: ` : ""}${msg}</div>
+    <ul class="sc-parts">${parts.map(p => `<li><span class="sc-k">${p.k}</span><span class="sc-bar"><span style="width:${Math.round(p.v * 100)}%"></span></span><span class="sc-v">${p.txt}</span></li>`).join("")}</ul></div></section>`;
+}
+const TRENDS = {
+  steps: { label: "Steps", unit: "", get: h => h.steps, bar: true, fmt: v => Math.round(v).toLocaleString("en-US"), goal: 8000 },
+  sleep: { label: "Sleep", unit: "h", get: h => h.sleepH, bar: true, fmt: v => f1(v), goal: 7 },
+  weight: { label: "Weight", unit: "lb", get: h => h.weight, fmt: v => f1(v) },
+  rhr: { label: "Resting HR", unit: "bpm", get: h => h.rhr, fmt: v => Math.round(v) }
+};
+function trendSvg(m, pts, span) {
+  const W = 340, H = 130, L = 4, R = 4, T = 10, B = 18, iw = W - L - R, ih = H - T - B;
+  const vals = pts.map(p => p.v).filter(v => v != null);
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  if (m.bar) { lo = 0; hi = Math.max(hi, m.goal || 0) * 1.08; } else { const pd = Math.max(1, (hi - lo) * 0.15); lo -= pd; hi += pd; }
+  const x = i => L + (i + 0.5) * iw / span, y = v => T + ih - (v - lo) / (hi - lo || 1) * ih;
+  let g = "";
+  if (m.goal) g += `<line x1="${L}" x2="${W - R}" y1="${y(m.goal).toFixed(1)}" y2="${y(m.goal).toFixed(1)}" stroke="var(--blue)" stroke-dasharray="3 4" stroke-width="1" opacity=".5"/>`;
+  if (m.bar) { const bw = Math.max(2, iw / span * 0.62); pts.forEach((p, i) => { if (p.v == null) return; const yy = y(p.v); g += `<rect x="${(x(i) - bw / 2).toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${(T + ih - yy).toFixed(1)}" rx="${Math.min(3, bw / 2).toFixed(1)}" fill="${m.goal && p.v >= m.goal ? "var(--blue)" : "#9cc8ff"}"/>`; }); }
+  else { const seg = pts.map((p, i) => p.v == null ? null : `${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).filter(Boolean); g += `<polyline points="${seg.join(" ")}" fill="none" stroke="var(--blue)" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>`; const lp = pts.map((p, i) => [p, i]).filter(([p]) => p.v != null).pop(); if (lp) g += `<circle cx="${x(lp[1]).toFixed(1)}" cy="${y(lp[0].v).toFixed(1)}" r="3.5" fill="var(--blue)"/>`; }
+  const first = pts[0].d, last = pts[pts.length - 1].d;
+  g += `<text x="${L}" y="${H - 4}" font-size="10" fill="var(--muted)">${fmtD(first)}</text><text x="${W - R}" y="${H - 4}" font-size="10" fill="var(--muted)" text-anchor="end">${fmtD(last)}</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${m.label} trend">${g}</svg>`;
+}
+function trendsCard() {
+  if (S.healthMissing || S.health.length < 2) return "";
+  const keys = Object.keys(TRENDS).filter(k => S.health.some(h => TRENDS[k].get(h) != null));
+  if (!keys.length) return "";
+  if (!keys.includes(S.trend)) S.trend = keys[0];
+  const m = TRENDS[S.trend], span = S.trendSpan || 30;
+  const ds = daysBack(span).reverse(), by = {}; S.health.forEach(h => { by[h.date] = h; });
+  const pts = ds.map(d => ({ d, v: by[d] ? m.get(by[d]) ?? null : null }));
+  const vals = pts.map(p => p.v).filter(v => v != null);
+  if (vals.length < 2) return "";
+  const half = Math.floor(span / 2), a1 = avg(pts.slice(0, half).map(p => p.v)), a2 = avg(pts.slice(half).map(p => p.v));
+  const delta = a1 != null && a2 != null ? a2 - a1 : null;
+  const dTxt = delta == null ? "" : `${delta >= 0 ? "▲" : "▼"} ${m.fmt(Math.abs(delta))}${m.unit ? " " + m.unit : ""} vs first half`;
+  return `<section class="card trends"><div class="card-h"><div><div class="kicker">Trends</div><h2>${m.label}</h2></div>
+    <div class="seg" role="group" aria-label="Range">${[30, 90].map(n => `<button type="button" data-tspan="${n}" aria-pressed="${n === span}">${n}d</button>`).join("")}</div></div>
+    <div class="seg tr-pick" role="group" aria-label="Metric">${keys.map(k => `<button type="button" data-trend="${k}" aria-pressed="${k === S.trend}">${TRENDS[k].label}</button>`).join("")}</div>
+    <div class="tr-sum"><span class="big">${m.fmt(avg(vals))}<small>${m.unit ? " " + m.unit : ""} avg</small></span><span class="muted small">${dTxt}</span></div>
+    ${trendSvg(m, pts, span)}</section>`;
+}
+
+/* ---------- coach overview: every client on one screen ---------- */
+async function loadOverview() {
+  S.screen = "overview"; S.ov = null; render();
+  try { S.ov = await api.overview(); } catch (err) { console.error(err); S.ov = { checkins: [], workouts: [], water: [], health: [], plans: [] }; toast("Couldn't load everything. Pull down to refresh."); }
+  render();
+}
+function ovRow(c, o) {
+  const t = todayISO(), wk = daysBack(7), inWk = d => wk.includes(d);
+  const ck = o.checkins.filter(x => x.client_id === c.id).sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.created_at).localeCompare(String(a.created_at)));
+  const last = ck[0], ago = last ? days(last.date, t) : null;
+  const needsReply = !!(last && !last.coach_note && ago <= 14);
+  const plan = o.plans.find(p => p.client_id === c.id), perWeek = plan && Array.isArray(plan.days) ? Math.min(7, plan.days.length) : 0;
+  const done = new Set(o.workouts.filter(w => w.client_id === c.id && inWk(w.date)).map(w => w.date + "|" + w.day_name)).size;
+  const lw = ck.find(x => x.weight_lb != null)?.weight_lb;
+  const goal = c.waterGoal || (lw ? Math.min(128, Math.max(64, Math.round(lw / 2 / 8) * 8)) : 64);
+  const wat = o.water.filter(w => w.client_id === c.id && inWk(w.date));
+  const waterDays = wat.filter(w => w.oz >= goal).length;
+  const hk = o.health.filter(h => h.client_id === c.id && inWk(h.date));
+  const steps = avg(hk.map(h => h.steps)), sleep = avg(hk.map(h => h.sleep_hours));
+  const parts = [];
+  if (perWeek) parts.push([35, Math.min(1, done / perWeek)]);
+  if (o.water.length) parts.push([25, waterDays / 7]);
+  if (steps != null) parts.push([20, Math.min(1, steps / 8000)]);
+  if (sleep != null) parts.push([20, Math.min(1, sleep / 7)]);
+  const tw = parts.reduce((a, p) => a + p[0], 0), score = tw ? Math.round(parts.reduce((a, p) => a + p[0] * p[1], 0) / tw * 100) : null;
+  const overdue = ago == null || ago > 9;
+  const flags = (needsReply ? 2 : 0) + (overdue ? 1 : 0) + (score != null && score < 40 ? 1 : 0);
+  const chips = [
+    needsReply ? `<span class="chip hot">💬 Needs your reply</span>` : "",
+    ago == null ? `<span class="chip warn">No check-ins yet</span>` : `<span class="chip${overdue ? " warn" : ""}">Check-in ${ago === 0 ? "today" : ago === 1 ? "yesterday" : ago + "d ago"}</span>`,
+    perWeek ? `<span class="chip">🏋️ ${done}/${perWeek} workouts</span>` : "",
+    wat.length ? `<span class="chip">💧 ${waterDays}/7 days</span>` : "",
+    steps != null ? `<span class="chip">👟 ${(steps / 1000).toFixed(1)}k steps</span>` : ""
+  ].join("");
+  return { c, flags, score, html: `<button type="button" class="ov-row${c.active ? "" : " paused"}" data-open="${esc(c.id)}">
+    <span class="ov-ring">${score != null ? ring(score, 54) : `<span class="ov-none">–</span>`}</span>
+    <span class="ov-main"><span class="ov-name">${esc(c.name)}${c.active ? "" : ` <em>Paused</em>`}</span><span class="ov-chips">${chips}</span></span><span class="ov-go" aria-hidden="true">›</span></button>` };
+}
+function overviewScreen() {
+  if (!S.ov) return `<div class="skel"></div>`;
+  const rows = S.clients.map(c => ovRow(c, S.ov)).sort((a, b) => (b.c.active - a.c.active) || (b.flags - a.flags) || ((a.score ?? 101) - (b.score ?? 101)) || a.c.name.localeCompare(b.c.name));
+  const active = rows.filter(r => r.c.active), attention = active.filter(r => r.flags > 0).length;
+  return `<section class="ov-head"><h1>Your clients</h1><p>${active.length} active${attention ? ` · <b>${attention} need${attention === 1 ? "s" : ""} attention</b>` : " · everyone's on track"}</p></section>
+    <div class="ov-list">${rows.map(r => r.html).join("") || `<div class="empty">No clients yet. <button class="btn primary sm" id="welcomeAdd" type="button">Add your first client</button></div>`}</div>
+    <p class="small muted ov-note">Score = this week's workouts, water goal days, steps and sleep. Needs-attention clients are listed first.</p>`;
+}
 /* ---------- coach feedback + workout plans ---------- */
 async function loadPlan() {
   S.plan = null;

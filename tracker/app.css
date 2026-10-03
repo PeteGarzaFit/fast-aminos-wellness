@@ -400,3 +400,43 @@ td .feelline{display:block;font-size:12px;color:var(--ink-2);margin-top:2px;whit
   .water .w-btns{margin-top:8px}
   .water .w-btns .btn{min-height:42px}
 }
+
+/* Weekly score */
+.score{display:flex;gap:16px;align-items:center}
+.sc-ring{flex:none}
+.sc-body{flex:1;min-width:0}
+.sc-msg{font-weight:700;font-size:15px;margin:2px 0 8px}
+.sc-parts{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.sc-parts li{display:grid;grid-template-columns:76px minmax(0,1fr) auto;gap:8px;align-items:center;font-size:12.5px}
+.sc-k{color:var(--ink-2);font-weight:650}
+.sc-bar{height:6px;border-radius:99px;background:var(--blue-soft);overflow:hidden}
+.sc-bar span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#5fb0ff,var(--blue))}
+.sc-v{color:var(--ink);font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ring text{font-family:var(--sans)}
+/* Trends */
+.trends .card-h{flex-wrap:nowrap}
+.tr-pick{margin:0 0 10px;flex-wrap:wrap}
+.tr-sum{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:4px}
+.tr-sum .big{font-size:26px}
+.tr-sum .big small{font-size:13px}
+@media (max-width:640px){.score{padding:14px;gap:12px}.score .ring{width:78px;height:78px}.trends{padding:14px}}
+
+/* Coach overview */
+.ov-head h1{font-family:var(--serif);font-weight:500;font-size:clamp(30px,4vw,42px);letter-spacing:-.03em;margin:0}
+.ov-head p{margin:4px 0 14px;color:var(--ink-2);font-size:14px}
+.ov-head p b{color:var(--warn)}
+.ov-list{display:flex;flex-direction:column;gap:10px}
+.ov-row{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--white);border:1px solid var(--line);border-radius:16px;padding:12px 14px;cursor:pointer;font:inherit;color:inherit}
+.ov-row:hover{border-color:var(--blue)}
+.ov-row.paused{opacity:.55}
+.ov-ring{flex:none;width:54px;height:54px;display:grid;place-items:center}
+.ov-none{width:46px;height:46px;border-radius:50%;border:5px solid var(--blue-soft);display:grid;place-items:center;color:var(--muted);font-weight:800}
+.ov-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.ov-name{font-weight:750;font-size:16px}
+.ov-name em{font-style:normal;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-left:4px}
+.ov-chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{font-size:12px;font-weight:650;background:var(--soft);border:1px solid var(--line);border-radius:999px;padding:2px 8px;color:var(--ink-2);white-space:nowrap}
+.chip.warn{background:var(--warn-soft);border-color:transparent;color:var(--warn)}
+.chip.hot{background:var(--blue);border-color:var(--blue);color:#fff}
+.ov-go{flex:none;font-size:26px;color:var(--faint);line-height:1}
+.ov-note{margin-top:14px}

@@ -95,14 +95,19 @@ final class AppModel: NSObject, ObservableObject {
             clientReady = (body["role"] as? String) == "client"
             guard clientReady else { return }
             if health.isConnected {
-                Task { await syncNow(days: 14) }
+                // One-time 90-day backfill for the trend charts, then the last 2 weeks on each open.
+                let backfilled = UserDefaults.standard.bool(forKey: "healthBackfill90")
+                Task {
+                    await syncNow(days: backfilled ? 14 : 90, force: !backfilled)
+                    UserDefaults.standard.set(true, forKey: "healthBackfill90")
+                }
             } else {
                 callPage(["connected": false])
             }
         case "connectHealth":
             Task { await connectHealth() }
         case "syncHealth":
-            Task { await syncNow(days: 14, force: true) }
+            Task { await syncNow(days: 90, force: true) }
         default:
             break
         }
@@ -117,7 +122,8 @@ final class AppModel: NSObject, ObservableObject {
         do {
             try await health.requestAuthorization()
             health.isConnected = true
-            await syncNow(days: 30, force: true)
+            await syncNow(days: 90, force: true)
+            UserDefaults.standard.set(true, forKey: "healthBackfill90")
             Reminders.requestAndScheduleWeeklyCheckIn()
         } catch {
             callPage(["connected": false, "error": "Couldn't connect to Apple Health. Please try again."])

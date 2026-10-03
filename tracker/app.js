@@ -399,7 +399,7 @@ function render() {
   }
   if (!S.clients.length) { app.innerHTML = welcome(); const b = $("#welcomeAdd"); if (b) b.onclick = () => openClient(null); return; }
   const c = client(); const s = series(c, S.checkins);
-  app.innerHTML = `<div class="stack">${head(c, s)}${msgBanner(c)}${coachCallout(c)}${todayWorkoutCard(c)}${habitsCard(c)}${todayCard(c)}${scoreCard(c)}${healthCard(c)}${waterCard(c)}${fuelCard(c)}${trendsCard()}${tiles(c, s)}${s.rows.length ? calNote(c, s) : ""}${planCard(c)}${strengthCard()}${badgesCard(c)}${workoutsCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div>${RENOVO && !S.isTrainer ? shopCard() : ""}${acctFoot()}</div>`;
+  app.innerHTML = `<div class="stack">${head(c, s)}${todayCard(c)}${scoreCard(c)}${msgBanner(c)}${coachCallout(c)}${todayWorkoutCard(c)}${habitsCard(c)}${healthCard(c)}${waterCard(c)}${fuelCard(c)}${trendsCard()}${tiles(c, s)}${s.rows.length ? calNote(c, s) : ""}${planCard(c)}${strengthCard()}${badgesCard(c)}${workoutsCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div>${RENOVO && !S.isTrainer ? shopCard() : ""}${acctFoot()}</div>`;
   wire(c, s);
   const da = $("#delAcct"); if (da) da.onclick = openDeleteAccount;
 }

@@ -115,13 +115,14 @@ function summaryText(c, s, forClient) {
 const isRestDay = d => /(^|·\s*)rest\b/i.test(d && d.name || "") || !(d && d.items || []).some(x => String(x.sets || "").trim());
 const trainDays = days => (Array.isArray(days) ? days : []).filter(d => !isRestDay(d)).length;
 const BUCKET = "progress-photos";
-const fromClientRow = r => ({ id: r.id, userId: r.user_id, email: r.email, name: r.name, sex: r.sex, dob: r.dob, height: num(r.height_in), goal: r.goal, glp1: !!r.on_glp1, active: r.active !== false, waterGoal: num(r.water_goal_oz), kcalGoal: num(r.kcal_goal), proteinGoal: num(r.protein_goal), carbsGoal: num(r.carbs_goal), fatGoal: num(r.fat_goal) });
+const fromClientRow = r => ({ id: r.id, userId: r.user_id, email: r.email, name: r.name, sex: r.sex, dob: r.dob, height: num(r.height_in), goal: r.goal, glp1: !!r.on_glp1, active: r.active !== false, waterGoal: num(r.water_goal_oz), kcalGoal: num(r.kcal_goal), proteinGoal: num(r.protein_goal), carbsGoal: num(r.carbs_goal), fatGoal: num(r.fat_goal), habits: Array.isArray(r.habits) ? r.habits : null });
 const toClientRow = c => ({ email: c.email, name: c.name, sex: c.sex, dob: c.dob || null, height_in: c.height, goal: c.goal || null, on_glp1: !!c.glp1, water_goal_oz: c.waterGoal ?? null, kcal_goal: c.kcalGoal ?? null, protein_goal: c.proteinGoal ?? null, carbs_goal: c.carbsGoal ?? null, fat_goal: c.fatGoal ?? null });
 const FEEL_KEYS = ["energy", "hunger", "sleep_q", "sleep_hours", "steps", "side_effects"];
 const SIDE_EFFECTS = ["Nausea", "Vomiting", "Constipation", "Diarrhea", "Heartburn", "Bloating", "Tired", "Headache", "Dizzy", "Low appetite"];
 const fromCheckinRow = r => ({ id: r.id, clientId: r.client_id, date: r.date, weight: num(r.weight_lb), waist: num(r.waist_in), neck: num(r.neck_in), hip: num(r.hip_in), omron: num(r.omron_bf), photoFront: r.photo_front, photoSide: r.photo_side, note: r.note, energy: num(r.energy), hunger: num(r.hunger), sleepQ: num(r.sleep_q), sleepH: num(r.sleep_hours), steps: num(r.steps), sideEffects: Array.isArray(r.side_effects) ? r.side_effects : [], coachNote: r.coach_note || null, coachNoteAt: r.coach_note_at || null, enteredBy: r.entered_by, createdAt: r.created_at });
 const fromWorkoutRow = r => ({ id: r.id, clientId: r.client_id, date: r.date, dayName: r.day_name || "", entries: Array.isArray(r.entries) ? r.entries : [], note: r.note || "", program: r.program || "", enteredBy: r.entered_by, createdAt: r.created_at });
 const fromHealthRow = r => ({ date: r.date, steps: num(r.steps), sleepH: num(r.sleep_hours), weight: num(r.weight_lb), kcal: num(r.active_kcal), exMin: num(r.exercise_min), rhr: num(r.resting_hr), kcalIn: num(r.kcal_in), protein: num(r.protein_g), carbs: num(r.carbs_g), fat: num(r.fat_g), hrv: num(r.hrv_ms), updatedAt: r.updated_at });
+const fromMsgRow = r => ({ id: r.id, clientId: r.client_id, fromCoach: !!r.from_coach, body: r.body || "", createdAt: r.created_at, readAt: r.read_at || null });
 const fromTplRow = r => ({ id: r.id, name: r.name, title: r.title || "", notes: r.notes || "", days: Array.isArray(r.days) ? r.days : [], program: r.program && typeof r.program === "object" ? r.program : null });
 const fromPlanRow = r => r ? ({ title: r.title || "", notes: r.notes || "", days: Array.isArray(r.days) ? r.days : [], program: r.program && typeof r.program === "object" ? r.program : null, updatedAt: r.updated_at }) : null;
 /* Supabase reports a missing table/column when the October 2026 database update hasn't been run yet. */
@@ -200,6 +201,15 @@ function supaApi(sb) {
       }
       chk(await sb.rpc("delete_my_account"));
     },
+    async setHabits(clientId, habits) { return fromClientRow(chk(await sb.from("clients").update({ habits }).eq("id", clientId).select().single())); },
+    async listHabitLogs(clientId) { return chk(await sb.from("habit_logs").select("date,habit_id").eq("client_id", clientId).gte("date", daysBack(130).pop())).map(r => ({ date: r.date, habitId: r.habit_id })); },
+    async toggleHabit(clientId, date, id, on) {
+      if (on) chk(await sb.from("habit_logs").upsert({ client_id: clientId, date, habit_id: id }, { onConflict: "client_id,date,habit_id", ignoreDuplicates: true }));
+      else chk(await sb.from("habit_logs").delete().eq("client_id", clientId).eq("date", date).eq("habit_id", id));
+    },
+    async listMessages(clientId) { return chk(await sb.from("messages").select("*").eq("client_id", clientId).order("created_at", { ascending: false }).limit(300)).map(fromMsgRow).reverse(); },
+    async sendMessage(clientId, body) { return fromMsgRow(chk(await sb.from("messages").insert({ client_id: clientId, body }).select().single())); },
+    async markRead(clientId, isTrainer) { chk(await sb.from("messages").update({ read_at: new Date().toISOString() }).eq("client_id", clientId).is("read_at", null).eq("from_coach", !isTrainer)); },
     async overview() {
       const since = daysBack(14).pop(), safe = async q => { const { data, error } = await q; if (error) { if (!isMissing(error)) console.error(error); return []; } return data || []; };
       const [checkins, workouts, water, health, plans] = await Promise.all([
@@ -207,8 +217,9 @@ function supaApi(sb) {
         safe(sb.from("workout_logs").select("client_id,date,day_name").gte("date", since)),
         safe(sb.from("water_daily").select("client_id,date,oz").gte("date", since)),
         safe(sb.from("health_daily").select("*").gte("date", daysBack(32).pop())),
-        safe(sb.from("client_plans").select("client_id,days"))]);
-      return { checkins, workouts, water, health, plans };
+        safe(sb.from("client_plans").select("*"))]);
+      const unread = await safe(sb.from("messages").select("client_id").is("read_at", null).eq("from_coach", false));
+      return { checkins, workouts, water, health, plans, unread };
     },
     async listWater(clientId) { return chk(await sb.from("water_daily").select("date,oz").eq("client_id", clientId).order("date", { ascending: false }).limit(400)).map(r => ({ date: r.date, oz: num(r.oz) || 0 })); },
     async setWater(clientId, date, oz) { chk(await sb.from("water_daily").upsert({ client_id: clientId, date, oz }, { onConflict: "client_id,date" })); },
@@ -233,7 +244,7 @@ function supaApi(sb) {
 
 function demoApi(asClient) {
   const clients = [
-    { id: "c1", userId: asClient ? "me" : "u1", email: "sample.client@example.com", name: "Sample Client", sex: "female", dob: "1990-04-12", height: 65, goal: "Lose fat, keep lean mass", glp1: true, active: true, kcalGoal: 1850, proteinGoal: 140, carbsGoal: 170, fatGoal: 65 },
+    { id: "c1", userId: asClient ? "me" : "u1", email: "sample.client@example.com", name: "Sample Client", sex: "female", dob: "1990-04-12", height: 65, goal: "Lose fat, keep lean mass", glp1: true, active: true, habits: ["workout", "steps10k", "sleep7", "water", "veg", "creatine"], kcalGoal: 1850, proteinGoal: 140, carbsGoal: 170, fatGoal: 65 },
     { id: "c2", userId: null, email: "sample.two@example.com", name: "Sample Client Two", sex: "male", dob: "1984-11-02", height: 70, goal: "Recomp for summer", active: false }
   ];
   const raw = [["c1","2026-06-08",162.4,31.5,13.5,39.8,30.1],["c1","2026-06-22",161.0,31.2,13.5,39.6],["c1","2026-07-06",159.8,30.9,13.4,39.4],["c1","2026-07-20",158.6,30.6,13.4,39.3,28.9],["c1","2026-08-03",157.9,30.4,13.4,39.1],["c1","2026-08-17",156.8,30.1,13.3,38.9],["c1","2026-08-31",156.2,29.9,13.3,38.8,27.4],["c1","2026-09-14",155.5,29.7,13.3,38.6],["c1","2026-09-28",155.1,29.3,13.3,38.5],
@@ -273,6 +284,14 @@ function demoApi(asClient) {
     return { date: iso, steps: 7000 + ((i * 1337) % 4200), sleepH: 6.4 + ((i * 7) % 12) / 10, weight: +(154.6 + i * 0.12).toFixed(1), kcal: 380 + ((i * 53) % 260), exMin: 22 + ((i * 11) % 35), rhr: 61 + (i % 4), hrv: i === 0 ? 54 : 42 + ((i * 7) % 11), kcalIn: i === 0 ? 1180 : 1700 + ((i * 97) % 300), protein: i === 0 ? 96 : 120 + ((i * 7) % 30), carbs: i === 0 ? 104 : 150 + ((i * 13) % 40), fat: i === 0 ? 41 : 55 + ((i * 5) % 15), updatedAt: "2026-10-01T07:30:00Z" }; });
   /* Sample water: today partly done, the last two weeks mostly near goal. */
   const water = Array.from({ length: 14 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - i); return { date: d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()), oz: i === 0 ? 32 : [80, 64, 72, 88, 56, 80, 72, 64, 88, 80, 72, 48, 80][i - 1] }; });
+  /* Sample habits and messages. */
+  const dIso = k => { const d = new Date(); d.setDate(d.getDate() - k); return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); };
+  let habitLogs = [];
+  for (let k = 1; k < 14; k++) { if (k % 5) habitLogs.push({ date: dIso(k), habitId: "veg" }); habitLogs.push({ date: dIso(k), habitId: "creatine" }); }
+  const msgs = [
+    { id: "m1", clientId: "c1", fromCoach: true, body: "Welcome to the Strength Builder! Week 1 is about finding your weights. Leave 2 reps in the tank.", createdAt: dIso(6) + "T15:02:00Z", readAt: dIso(6) + "T16:00:00Z" },
+    { id: "m2", clientId: "c1", fromCoach: false, body: "Thanks! Is it ok to do Friday's workout Saturday this week?", createdAt: dIso(2) + "T18:20:00Z", readAt: dIso(2) + "T19:00:00Z" },
+    { id: "m3", clientId: "c1", fromCoach: true, body: "Totally fine. Just keep a rest day before Monday. Great job hitting your protein 6 days straight 🥩", createdAt: dIso(0) + "T13:05:00Z", readAt: null }];
   const templates = [{ id: "t1", name: "8-Week Strength Builder (4-day Upper/Lower)", title: "8-Week Strength Builder", notes: SB.notes, days: JSON.parse(JSON.stringify(SB.days)), program: JSON.parse(JSON.stringify(SB.program)) }];
   const photos = {};
   const wait = () => new Promise(r => setTimeout(r, 120));
@@ -294,10 +313,16 @@ function demoApi(asClient) {
     async listHealth(id) { await wait(); return id === "c1" ? health.slice() : []; },
     async upsertHealth(id, rows) { await wait(); rows.forEach(r => { const i = health.findIndex(h => h.date === r.date); const h = { date: r.date, steps: r.steps ?? null, sleepH: r.sleepHours ?? null, weight: r.weightLb ?? null, kcal: r.activeKcal ?? null, exMin: r.exerciseMin ?? null, rhr: r.restingHr ?? null, kcalIn: r.kcalIn ?? null, protein: r.proteinG ?? null, carbs: r.carbsG ?? null, fat: r.fatG ?? null, hrv: r.hrvMs ?? null, updatedAt: new Date().toISOString() }; if (i >= 0) health[i] = h; else health.push(h); }); health.sort((a, b) => b.date.localeCompare(a.date)); },
     async deleteAccount() { await wait(); },
+    async setHabits(id, habits) { await wait(); const c = clients.find(x => x.id === id); c.habits = habits; return { ...c }; },
+    async listHabitLogs(id) { await wait(); return id === "c1" ? habitLogs.map(h => ({ ...h })) : []; },
+    async toggleHabit(id, date, hid, on) { await wait(); habitLogs = habitLogs.filter(h => !(h.date === date && h.habitId === hid)); if (on) habitLogs.push({ date, habitId: hid }); },
+    async listMessages(id) { await wait(); return msgs.filter(m => m.clientId === id).map(m => ({ ...m })); },
+    async sendMessage(id, body) { await wait(); const m = { id: uid(), clientId: id, fromCoach: !asClient, body, createdAt: new Date().toISOString(), readAt: null }; msgs.push(m); return { ...m }; },
+    async markRead(id, isTrainer) { await wait(); msgs.forEach(m => { if (m.clientId === id && !m.readAt && m.fromCoach === !isTrainer) m.readAt = new Date().toISOString(); }); },
     async overview() { await wait();
       return { checkins: entries.map(e => ({ client_id: e.clientId, date: e.date, coach_note: e.coachNote, created_at: e.createdAt, weight_lb: e.weight })),
         workouts: workouts.map(w => ({ client_id: w.clientId, date: w.date, day_name: w.dayName })), water: water.map(w => ({ client_id: "c1", date: w.date, oz: w.oz })),
-        health: health.map(h => ({ client_id: "c1", date: h.date, steps: h.steps, sleep_hours: h.sleepH, hrv_ms: h.hrv, resting_hr: h.rhr, active_kcal: h.kcal, exercise_min: h.exMin })), plans: Object.entries(plans).map(([k, v]) => ({ client_id: k, days: v.days })) }; },
+        health: health.map(h => ({ client_id: "c1", date: h.date, steps: h.steps, sleep_hours: h.sleepH, hrv_ms: h.hrv, resting_hr: h.rhr, active_kcal: h.kcal, exercise_min: h.exMin })), plans: Object.entries(plans).map(([k, v]) => ({ client_id: k, days: v.days, program: v.program || null, updated_at: v.updatedAt })), unread: msgs.filter(m => !m.readAt && !m.fromCoach).map(m => ({ client_id: m.clientId })) }; },
     async listWater(id) { await wait(); return id === "c1" ? water.map(w => ({ ...w })) : []; },
     async setWater(id, date, oz) { await wait(); const w = water.find(x => x.date === date); if (w) w.oz = oz; else { water.push({ date, oz }); water.sort((a, b) => b.date.localeCompare(a.date)); } },
     async listWorkouts(id) { await wait(); return workouts.filter(w => w.clientId === id).sort((a, b) => b.date.localeCompare(a.date) || String(b.createdAt).localeCompare(String(a.createdAt))).map(w => JSON.parse(JSON.stringify(w))); },
@@ -330,7 +355,7 @@ if (RENOVO) {
 }
 const IS_HOME_APP = IN_APP || window.navigator.standalone === true || (window.matchMedia && matchMedia("(display-mode: standalone)").matches);
 let sb = null, api = null;
-const S = { me: null, isTrainer: false, clients: [], sel: null, checkins: [], plan: null, planMissing: false, templates: [], workouts: [], workoutsMissing: false, health: [], healthMissing: false, water: [], waterMissing: false, app: { connected: false, lastSync: null }, urls: {}, screen: "loading", metric: "bf", view: "front", cmpA: null, cmpB: null, overlay: false, fade: 50, authEmail: "", authStep: "email", pwMode: null, pwBack: null };
+const S = { me: null, isTrainer: false, clients: [], sel: null, checkins: [], plan: null, planMissing: false, templates: [], workouts: [], workoutsMissing: false, health: [], healthMissing: false, water: [], waterMissing: false, habitLogs: [], habitsMissing: false, msgs: [], msgsMissing: false, app: { connected: false, lastSync: null }, urls: {}, screen: "loading", metric: "bf", view: "front", cmpA: null, cmpB: null, overlay: false, fade: 50, authEmail: "", authStep: "email", pwMode: null, pwBack: null };
 const store = { get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (_) {} } };
 const client = () => S.clients.find(c => c.id === S.sel) || null;
 const canDelete = e => S.isTrainer || (S.me && e.enteredBy === S.me.id);
@@ -373,7 +398,7 @@ function render() {
   }
   if (!S.clients.length) { app.innerHTML = welcome(); const b = $("#welcomeAdd"); if (b) b.onclick = () => openClient(null); return; }
   const c = client(); const s = series(c, S.checkins);
-  app.innerHTML = `<div class="stack">${head(c, s)}${coachCallout(c)}${todayCard(c)}${scoreCard(c)}${healthCard(c)}${waterCard(c)}${fuelCard(c)}${trendsCard()}${tiles(c, s)}${s.rows.length ? calNote(c, s) : ""}${planCard(c)}${strengthCard()}${badgesCard(c)}${workoutsCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div>${RENOVO && !S.isTrainer ? shopCard() : ""}${acctFoot()}</div>`;
+  app.innerHTML = `<div class="stack">${head(c, s)}${msgBanner(c)}${coachCallout(c)}${todayWorkoutCard(c)}${habitsCard(c)}${todayCard(c)}${scoreCard(c)}${healthCard(c)}${waterCard(c)}${fuelCard(c)}${trendsCard()}${tiles(c, s)}${s.rows.length ? calNote(c, s) : ""}${planCard(c)}${strengthCard()}${badgesCard(c)}${workoutsCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div>${RENOVO && !S.isTrainer ? shopCard() : ""}${acctFoot()}</div>`;
   wire(c, s);
   const da = $("#delAcct"); if (da) da.onclick = openDeleteAccount;
 }
@@ -555,7 +580,7 @@ function head(c, s) {
   const linked = S.isTrainer ? (c.userId ? ` · <span title="${esc(c.email)}">Signed in</span>` : ` · <span title="${esc(c.email)}">Hasn't signed in yet</span>`) : "";
   return `<div class="chead"><div class="grow">${S.isTrainer ? "" : `<div class="kicker">Your progress</div>`}<h1>${esc(c.name)}</h1>
     <div class="meta">${esc(bits)}${c.goal ? ` · Goal: ${esc(c.goal)}` : ""}${linked}</div>${pill}</div>
-    <div class="actions">${calcLink(c, s)}${S.isTrainer ? `<button class="btn" id="editClient" type="button">Edit client</button><button class="btn${c.active ? "" : " primary"}" id="toggleActive" type="button">${c.active ? "Pause coaching" : "Resume coaching"}</button>` : ""}<button class="btn primary" id="newEntry" type="button">${S.isTrainer ? "New check-in" : "Log check-in"}</button></div></div>`;
+    <div class="actions">${msgButton(c)}${calcLink(c, s)}${S.isTrainer ? `<button class="btn" id="editClient" type="button">Edit client</button><button class="btn${c.active ? "" : " primary"}" id="toggleActive" type="button">${c.active ? "Pause coaching" : "Resume coaching"}</button>` : ""}<button class="btn primary" id="newEntry" type="button">${S.isTrainer ? "New check-in" : "Log check-in"}</button></div></div>`;
 }
 
 /* Opens the public calculator pre-filled with this client's latest numbers. */
@@ -682,6 +707,8 @@ function wire(c, s) {
   const on = (sel, fn) => { const el = $(sel); if (el) el.onclick = fn; };
   on("#editClient", () => openClient(c)); on("#newEntry", () => openEntry(c)); on("#firstEntry", () => openEntry(c));
   on("#toggleActive", () => toggleActive(c));
+  on("#openMsgs", () => openMessages(c)); on("#openMsgs2", () => openMessages(c));
+  wireHabits(c);
   wireWater(c);
   on("#editPlan", () => openPlan(c)); on("#buildPlan", () => openPlan(c));
   on("#connectHealth", () => { const b = $("#connectHealth"); b.disabled = true; b.textContent = "Waiting for Apple Health…"; toApp({ type: "connectHealth" }); });
@@ -751,6 +778,8 @@ async function loadCheckins() {
     await loadWorkouts();
     await loadHealth();
     await loadWater();
+    await loadHabits();
+    await loadMessages();
     const paths = S.checkins.flatMap(e => [e.photoFront, e.photoSide]).filter(p => p && !S.urls[p]);
     if (paths.length) Object.assign(S.urls, await api.photoUrls(paths));
   } catch (err) { console.error(err); toast("Couldn't load check-ins. Check your connection and reload."); }
@@ -1054,6 +1083,199 @@ function fuelCard(c) {
     ${top}<div class="fuel-macros">${macro("protein", "Protein", today.protein, c.proteinGoal)}${macro("carbs", "Carbs", today.carbs, c.carbsGoal)}${macro("fat", "Fat", today.fat, c.fatGoal)}</div></section>`;
 }
 
+/* ---------- today's workout + missed workouts ---------- */
+const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+/* A plan is "scheduled" when its day names start with weekdays (Mon · Upper A). Returns the day index for a date, -1 for an unscheduled weekday (rest), or null when the plan has no schedule. */
+function planDayFor(p, iso) {
+  if (!p || !p.days.length) return null;
+  const wd = d => { const m = String(d.name || "").trim().toLowerCase().match(/^(sun|mon|tue|wed|thu|fri|sat)/); return m ? m[1] : null; };
+  if (!p.days.some(wd)) return null;
+  const want = WEEKDAYS[toDate(iso).getDay()], i = p.days.findIndex(d => wd(d) === want);
+  return i;
+}
+const planStart = p => (p.program && p.program.start) || String(p.updatedAt || "").slice(0, 10) || todayISO();
+/* Scheduled training days in the last `n` days (not today) with no workout logged that day. */
+function missedDays(p, workouts, n) {
+  const out = [], logged = new Set(workouts.map(w => w.date)), start = planStart(p);
+  daysBack(n + 1).slice(1).forEach(d => { if (d < start) return; const i = planDayFor(p, d); if (i == null || i < 0 || isRestDay(p.days[i])) return; if (!logged.has(d)) out.push({ date: d, i, name: p.days[i].name }); });
+  return out;
+}
+const shortDay = n => String(n || "").replace(/^(sun|mon|tue|wed|thu|fri|sat)[a-z]*\s*·\s*/i, "").replace(/\s*\(.*?\)\s*/g, " ").trim() || String(n || "");
+function todayWorkoutCard(c) {
+  const p = S.plan; if (!p || !p.days.length || S.workoutsMissing) return "";
+  const t = todayISO(), idx = planDayFor(p, t), doneToday = S.workouts.filter(w => w.date === t);
+  const missed = missedDays(p, S.workouts, 3)[0];
+  const who = S.isTrainer ? firstName(c.name) : "";
+  let body;
+  if (doneToday.length) body = `<div class="tw-main"><span class="tw-ic">✅</span><div><b>${S.isTrainer ? `${esc(who)} trained today` : "Workout done. Great job!"}</b><span class="muted small">${esc(shortDay(doneToday[0].dayName))} · ${doneToday[0].entries.length} exercises</span></div></div>`;
+  else if (idx === -1 || (idx != null && isRestDay(p.days[idx]))) body = `<div class="tw-main"><span class="tw-ic">🛌</span><div><b>Rest day</b><span class="muted small">Walk, stretch, hit your protein and sleep 7–9 hours.</span></div></div>`;
+  else {
+    let i = idx;
+    if (i == null) { const last = S.workouts[0], li = last ? p.days.findIndex(d => d.name === last.dayName) : -1; i = p.days.findIndex((d, k) => k > li && !isRestDay(d)); if (i < 0) i = p.days.findIndex(d => !isRestDay(d)); }
+    const d = p.days[i], n = (d.items || []).length;
+    body = `<div class="tw-main"><span class="tw-ic">🏋️</span><div><b>${idx == null ? "Next up" : "Today"}: ${esc(shortDay(d.name))}</b><span class="muted small">${n} exercises${S.plan.program && progWeek(S.plan.program) >= 1 && progWeek(S.plan.program) <= S.plan.program.weeks ? ` · Week ${progWeek(S.plan.program)} of ${S.plan.program.weeks}` : ""}</span></div>
+      ${S.workoutsMissing ? "" : `<button type="button" class="btn primary" data-start="${i}">${S.isTrainer ? "Log it" : "Start"}</button>`}</div>`;
+  }
+  const miss = missed && !doneToday.length ? `<div class="tw-miss">❌ Missed ${toDate(missed.date).toLocaleDateString("en-US", { weekday: "short" })}: ${esc(shortDay(missed.name))}${S.isTrainer ? "" : `. No stress. <button type="button" class="linkbtn" data-start="${missed.i}">Make it up today</button>`}</div>` : "";
+  return `<section class="card tw">${body}${miss}</section>`;
+}
+
+/* ---------- habits ---------- */
+const HABITS = {
+  workout: { icon: "🏋️", label: "Do my workout", auto: true },
+  steps8k: { icon: "👟", label: "8,000+ steps", auto: true },
+  steps10k: { icon: "👟", label: "10,000+ steps", auto: true },
+  sleep7: { icon: "🌙", label: "Sleep 7+ hours", auto: true },
+  water: { icon: "💧", label: "Hit my water goal", auto: true },
+  protein: { icon: "🥩", label: "Hit my protein goal", auto: true },
+  veg: { icon: "🥦", label: "Vegetables with every meal" },
+  noalcohol: { icon: "🚫", label: "No alcohol" },
+  stretch: { icon: "🧘", label: "Stretch or mobility 10 min" },
+  vitamins: { icon: "💊", label: "Vitamins / supplements" },
+  creatine: { icon: "⚡", label: "Creatine 5 g" },
+  sunlight: { icon: "☀️", label: "Morning sunlight 10 min" },
+  nophone: { icon: "📵", label: "No phone in bed" },
+  mealprep: { icon: "🍱", label: "Meal prep / plan my meals" },
+  breathe: { icon: "🌬️", label: "5 min breathing or meditation" },
+  journal: { icon: "✍️", label: "Gratitude journal" }
+};
+/* The client's habits as objects: catalog ids plus custom { id, label }. */
+function habitsOf(c) {
+  return (Array.isArray(c.habits) ? c.habits : []).map(h => typeof h === "string" ? (HABITS[h] ? { id: h, ...HABITS[h] } : null) : (h && h.id && h.label ? { id: String(h.id), label: String(h.label), icon: "⭐" } : null)).filter(Boolean);
+}
+/* true / false for a day, or null when it doesn't apply (rest day, no data yet). */
+function habitDone(c, h, iso) {
+  if (!h.auto) return S.habitLogs.some(l => l.date === iso && l.habitId === h.id);
+  const hd = S.health.find(x => x.date === iso) || {};
+  switch (h.id) {
+    case "workout": { if (S.workouts.some(w => w.date === iso)) return true; const p = S.plan, i = p ? planDayFor(p, iso) : null; return i === -1 || (i != null && i >= 0 && isRestDay(p.days[i])) ? null : false; }
+    case "steps8k": return hd.steps == null ? false : hd.steps >= 8000;
+    case "steps10k": return hd.steps == null ? false : hd.steps >= 10000;
+    case "sleep7": return hd.sleepH == null ? false : hd.sleepH >= 7;
+    case "water": return waterOn(iso) >= waterGoal(c);
+    case "protein": return !c.proteinGoal || hd.protein == null ? false : hd.protein >= c.proteinGoal * 0.95;
+  }
+  return false;
+}
+function habitProgress(c, h) {
+  const hd = S.health.find(x => x.date === todayISO()) || {};
+  if (h.id === "steps8k" || h.id === "steps10k") return hd.steps != null ? `${hd.steps.toLocaleString("en-US")} / ${h.id === "steps8k" ? "8,000" : "10,000"}` : "From Apple Health";
+  if (h.id === "sleep7") return hd.sleepH != null ? `${f1(hd.sleepH)} h last night` : "From Apple Health";
+  if (h.id === "water") return `${waterOn(todayISO())} / ${waterGoal(c)} oz`;
+  if (h.id === "protein") return c.proteinGoal ? `${Math.round(hd.protein || 0)} / ${c.proteinGoal} g` : "Needs a protein target";
+  if (h.id === "workout") return habitDone(c, h, todayISO()) === null ? "Rest day" : "";
+  return "";
+}
+function habitStreak(c, h) { let n = 0; for (const d of daysBack(120)) { const v = habitDone(c, h, d); if (v === null) continue; if (v) n++; else if (d !== todayISO()) break; } return n; }
+function habitWeek(c) {
+  const hs = habitsOf(c); let done = 0, total = 0;
+  hs.forEach(h => daysBack(7).forEach(d => { const v = habitDone(c, h, d); if (v === null) return; total++; if (v) done++; }));
+  return total ? done / total : null;
+}
+async function loadHabits() {
+  S.habitLogs = [];
+  try { S.habitLogs = await api.listHabitLogs(S.sel); S.habitsMissing = false; }
+  catch (err) { if (isMissing(err)) S.habitsMissing = true; else console.error(err); }
+}
+function habitsCard(c) {
+  if (S.habitsMissing) return "";
+  const hs = habitsOf(c), t = todayISO();
+  if (!hs.length) return S.isTrainer ? `<section class="card habits"><div class="card-h"><div><div class="kicker">Habits</div><h2>No habits yet</h2></div><button class="btn sm" type="button" id="editHabits">Pick habits</button></div><p class="small muted">Pick 3–5 daily habits for ${esc(firstName(c.name))}. Steps, sleep, water, protein and workouts check themselves off.</p></section>`
+    : `<section class="card habits"><div class="card-h"><div><div class="kicker">Habits</div><h2>Build your habits</h2></div><button class="btn sm" type="button" id="editHabits">Pick habits</button></div><p class="small muted">Pick a few daily habits to track. Small wins every day add up.</p></section>`;
+  const wk = habitWeek(c), rows = hs.map(h => {
+    const v = habitDone(c, h, t), st = habitStreak(c, h), prog = habitProgress(c, h);
+    const dots = daysBack(7).reverse().map(d => { const x = habitDone(c, h, d); return `<i class="${x === null ? "na" : x ? "on" : ""}"></i>`; }).join("");
+    const btn = h.auto ? `<span class="hk${v ? " on" : v === null ? " na" : ""}" aria-label="${v ? "Done" : "Not yet"}">${v ? "✓" : ""}</span>`
+      : `<button type="button" class="hk${v ? " on" : ""}" data-habit="${esc(h.id)}" aria-pressed="${!!v}" aria-label="${esc(h.label)}"${S.isTrainer ? " disabled" : ""}>${v ? "✓" : ""}</button>`;
+    return `<li><span class="hicon">${h.icon}</span><div class="htxt"><b>${esc(h.label)}</b><span>${prog ? esc(prog) + " · " : ""}${h.auto ? "auto" : "tap to check"}${st >= 2 ? ` · 🔥 ${st} days` : ""}</span><span class="hdots" aria-hidden="true">${dots}</span></div>${btn}</li>`;
+  }).join("");
+  return `<section class="card habits"><div class="card-h"><div><div class="kicker">Habits${wk != null ? ` · ${Math.round(wk * 100)}% this week` : ""}</div><h2>Today's habits</h2></div><button class="btn sm ghost" type="button" id="editHabits">Edit</button></div><ul class="hlist">${rows}</ul></section>`;
+}
+/* Pick habits: the trainer for any client, a client for themselves. */
+function openHabits(c) {
+  let d = $("#dlgHabits");
+  if (!d) { d = document.createElement("dialog"); d.id = "dlgHabits"; document.body.appendChild(d); }
+  const cur = new Set((Array.isArray(c.habits) ? c.habits : []).map(h => typeof h === "string" ? h : null).filter(Boolean));
+  const custom = (Array.isArray(c.habits) ? c.habits : []).filter(h => h && typeof h === "object").map(h => h.label).join(", ");
+  d.innerHTML = `<form method="dialog" novalidate><h3>${S.isTrainer ? `Habits for ${esc(firstName(c.name))}` : "Your habits"}</h3><p class="small muted">Pick 3–5. Ones marked <b>auto</b> check themselves off from Apple Health, water, food and workouts.</p>
+    <div class="hpick">${Object.entries(HABITS).map(([id, h]) => `<label><input type="checkbox" value="${id}"${cur.has(id) ? " checked" : ""}> ${h.icon} ${esc(h.label)}${h.auto ? ` <em>auto</em>` : ""}</label>`).join("")}</div>
+    <div class="field"><label for="hCustom">Your own habits (optional, separate with commas)</label><input id="hCustom" type="text" maxlength="200" value="${esc(custom)}" placeholder="e.g. Read 10 pages, Walk the dog"></div>
+    <div class="err" id="hErr"></div><div class="foot"><span></span><div class="r"><button type="button" class="btn" id="hCancel">Cancel</button><button type="submit" class="btn primary" id="hSave">Save habits</button></div></div></form>`;
+  $("#hCancel").onclick = () => d.close();
+  d.querySelector("form").onsubmit = async ev => {
+    ev.preventDefault();
+    const ids = $$("#dlgHabits .hpick input:checked").map(x => x.value);
+    const cust = $("#hCustom").value.split(",").map(x => x.trim()).filter(Boolean).slice(0, 5).map(l => ({ id: "c-" + l.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 30), label: l.slice(0, 60) }));
+    const habits = [...ids, ...cust];
+    if (habits.length > 10) { $("#hErr").textContent = "Pick 10 or fewer. 3–5 works best."; return; }
+    const b = $("#hSave"); b.disabled = true;
+    try { await api.setHabits(c.id, habits); c.habits = habits; d.close(); toast("Habits saved"); render(); }
+    catch (e) { console.error(e); $("#hErr").textContent = isMissing(e) ? "Run the latest database update (supabase/schema.sql) first." : "Couldn't save. Try again."; }
+    b.disabled = false;
+  };
+  d.showModal();
+}
+async function toggleHabit(c, id) {
+  const t = todayISO(), on = !S.habitLogs.some(l => l.date === t && l.habitId === id);
+  if (on) S.habitLogs.push({ date: t, habitId: id }); else S.habitLogs = S.habitLogs.filter(l => !(l.date === t && l.habitId === id));
+  const card = document.querySelector(".habits"); if (card) { card.outerHTML = habitsCard(c); wireHabits(c); }
+  try { await api.toggleHabit(c.id, t, id, on); if (on) { const h = habitsOf(c).find(x => x.id === id), st = h ? habitStreak(c, h) : 0; if (st >= 3) toast(`🔥 ${st}-day streak: ${h.label}`); } }
+  catch (e) { console.error(e); toast("Couldn't save that. Check your connection."); }
+}
+function wireHabits(c) {
+  $$("[data-habit]").forEach(b => b.onclick = () => toggleHabit(c, b.dataset.habit));
+  const eh = $("#editHabits"); if (eh) eh.onclick = () => openHabits(c);
+}
+
+/* ---------- messages ---------- */
+async function loadMessages() {
+  S.msgs = [];
+  try { S.msgs = await api.listMessages(S.sel); S.msgsMissing = false; }
+  catch (err) { if (isMissing(err)) S.msgsMissing = true; else console.error(err); }
+}
+const unreadFor = msgs => msgs.filter(m => !m.readAt && m.fromCoach === !S.isTrainer).length;
+function msgButton(c) {
+  if (S.msgsMissing) return "";
+  const n = unreadFor(S.msgs);
+  return `<button class="btn msgbtn" id="openMsgs" type="button">💬 ${S.isTrainer ? "Message" : `Message ${esc(TRAINER)}`}${n ? `<span class="badge-n">${n}</span>` : ""}</button>`;
+}
+function msgBanner(c) {
+  if (S.msgsMissing) return "";
+  const n = unreadFor(S.msgs); if (!n) return "";
+  const last = [...S.msgs].reverse().find(m => !m.readAt && m.fromCoach === !S.isTrainer);
+  return `<button type="button" class="msgbanner" id="openMsgs2"><span>💬</span><span><b>${n} new message${n > 1 ? "s" : ""} from ${S.isTrainer ? esc(firstName(c.name)) : esc(TRAINER)}</b><em>${esc(String(last.body).slice(0, 90))}${last.body.length > 90 ? "…" : ""}</em></span></button>`;
+}
+let msgPoll = null;
+function drawMsgs() {
+  const box = $("#msgList"); if (!box) return;
+  const me = S.isTrainer;
+  box.innerHTML = S.msgs.length ? S.msgs.map((m, i) => { const mine = m.fromCoach === me, day = String(m.createdAt).slice(0, 10), prev = i ? String(S.msgs[i - 1].createdAt).slice(0, 10) : "";
+    return `${day !== prev ? `<div class="mday">${fmtD(day, day.slice(0, 4) !== todayISO().slice(0, 4))}</div>` : ""}<div class="bub${mine ? " me" : ""}"><p>${esc(m.body)}</p><span>${new Date(m.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}${mine && m.readAt ? " · Seen" : ""}</span></div>`; }).join("")
+    : `<p class="small muted" style="text-align:center;margin:30px 0">${me ? "Send a message. It shows up in their app." : `Questions about your plan, form or food? Message ${esc(TRAINER)} here.`}</p>`;
+  box.scrollTop = box.scrollHeight;
+}
+async function refreshMsgs(c) {
+  try { const before = S.msgs.length; S.msgs = await api.listMessages(c.id); if (unreadFor(S.msgs)) { await api.markRead(c.id, S.isTrainer); S.msgs.forEach(m => { if (!m.readAt && m.fromCoach === !S.isTrainer) m.readAt = new Date().toISOString(); }); } if (S.msgs.length !== before) drawMsgs(); } catch (e) { console.error(e); }
+}
+function openMessages(c) {
+  let d = $("#dlgMsg");
+  if (!d) { d = document.createElement("dialog"); d.id = "dlgMsg"; d.className = "wide"; document.body.appendChild(d); }
+  d.innerHTML = `<form method="dialog" novalidate class="msgform"><div class="msghead"><h3>${S.isTrainer ? `💬 ${esc(c.name)}` : `💬 ${esc(TRAINER)}`}</h3><button type="button" class="btn ghost sm" id="msgClose">Close</button></div>
+    <div id="msgList" class="msglist"></div>
+    <div class="msgsend"><textarea id="msgText" rows="2" maxlength="2000" placeholder="Write a message…"></textarea><button type="submit" class="btn primary" id="msgGo">Send</button></div></form>`;
+  $("#msgClose").onclick = () => d.close();
+  d.querySelector("form").onsubmit = async ev => {
+    ev.preventDefault(); const t = $("#msgText").value.trim(); if (!t) return;
+    const b = $("#msgGo"); b.disabled = true;
+    try { const m = await api.sendMessage(c.id, t); S.msgs.push(m); $("#msgText").value = ""; drawMsgs(); }
+    catch (e) { console.error(e); toast(isMissing(e) ? "Messages need the latest database update (supabase/schema.sql)." : "Couldn't send. Check your connection."); }
+    b.disabled = false; $("#msgText").focus();
+  };
+  d.addEventListener("close", () => { clearInterval(msgPoll); msgPoll = null; render(); }, { once: true });
+  drawMsgs(); d.showModal(); refreshMsgs(c);
+  clearInterval(msgPoll); msgPoll = setInterval(() => refreshMsgs(c), 8000);
+}
+
 /* ---------- daily Recovery / Sleep / Strain (personal baselines, like Bevel or WHOOP) ---------- */
 const lerp = (x, pts) => { if (x <= pts[0][0]) return pts[0][1]; for (let i = 1; i < pts.length; i++) { const [x0, y0] = pts[i - 1], [x1, y1] = pts[i]; if (x <= x1) return y0 + (y1 - y0) * (x - x0) / (x1 - x0); } return pts[pts.length - 1][1]; };
 const sd = a => { const m = avg(a); return a.length > 1 ? Math.sqrt(a.reduce((s, v) => s + (v - m) ** 2, 0) / (a.length - 1)) : 0; };
@@ -1185,6 +1407,10 @@ function badgeList(c) {
     add("wa7s", "💧", "Water streak", "Water goal 7 days in a row", longestDayRun(hit), 7);
   }
   if (c.proteinGoal) { const ph = S.health.filter(h => h.protein != null && h.protein >= c.proteinGoal * 0.95).length; [[7, "Protein week"], [30, "Protein pro"]].forEach(([n, t]) => add("pg" + n, "🥩", t, `Hit your protein goal on ${n} days`, ph, n)); }
+  if (!S.habitsMissing && habitsOf(c).length) {
+    const best = Math.max(0, ...habitsOf(c).map(h => { let b = 0, r = 0; daysBack(120).reverse().forEach(d => { const v = habitDone(c, h, d); if (v === null) return; r = v ? r + 1 : 0; b = Math.max(b, r); }); return b; }));
+    [[7, "7-day habit streak"], [30, "30-day habit streak"], [100, "100-day habit streak"]].forEach(([n, t]) => add("hs" + n, "🎯", t, `Keep any habit going ${n} days in a row`, best, n));
+  }
   [[4, "4 check-ins"], [12, "12 check-ins"], [26, "26 check-ins"]].forEach(([n, t]) => add("ci" + n, "📏", t, `Log ${n} check-ins`, S.checkins.length, n));
   return out;
 }
@@ -1220,6 +1446,8 @@ function weekScore(c) {
   if (!S.waterMissing) parts.push({ k: "Water goal", w: 25, v: waterDays / 7, txt: `${waterDays} of 7 days` });
   if (stepsAvg != null) parts.push({ k: "Steps", w: 20, v: Math.min(1, stepsAvg / 8000), txt: `${Math.round(stepsAvg).toLocaleString("en-US")}/day` });
   if (sleepAvg != null) parts.push({ k: "Sleep", w: 20, v: Math.min(1, sleepAvg / 7), txt: `${f1(sleepAvg)} h/night` });
+  const hw = S.habitsMissing ? null : habitWeek(c);
+  if (hw != null) parts.push({ k: "Habits", w: 20, v: hw, txt: `${Math.round(hw * 100)}%` });
   const tw = parts.reduce((a, p) => a + p.w, 0);
   return { parts, score: tw ? Math.round(parts.reduce((a, p) => a + p.w * p.v, 0) / tw * 100) : null };
 }
@@ -1303,9 +1531,12 @@ function ovRow(c, o) {
   if (sleep != null) parts.push([20, Math.min(1, sleep / 7)]);
   const tw = parts.reduce((a, p) => a + p[0], 0), score = tw ? Math.round(parts.reduce((a, p) => a + p[0] * p[1], 0) / tw * 100) : null;
   const overdue = ago == null || ago > 9;
-  const flags = (needsReply ? 2 : 0) + (overdue ? 1 : 0) + (score != null && score < 40 ? 1 : 0);
+  const missedList = plan ? missedDays({ days: plan.days || [], program: plan.program || null, updatedAt: plan.updated_at }, o.workouts.filter(w => w.client_id === c.id).map(w => ({ date: w.date })), 7) : [];
+  const flags = (missedList.length ? 1 : 0) + ((o.unread || []).some(u => u.client_id === c.id) ? 3 : 0) + (needsReply ? 2 : 0) + (overdue ? 1 : 0) + (score != null && score < 40 ? 1 : 0);
   const chips = [
-    needsReply ? `<span class="chip hot">💬 Needs your reply</span>` : "",
+    (() => { const n = (o.unread || []).filter(u => u.client_id === c.id).length; return n ? `<span class="chip hot">💬 ${n} new message${n > 1 ? "s" : ""}</span>` : ""; })(),
+    needsReply ? `<span class="chip hot">📏 Check-in needs reply</span>` : "",
+    (() => { const m = missedList; return m.length ? `<span class="chip warn">❌ Missed ${m.length > 1 ? m.length + " workouts" : toDate(m[0].date).toLocaleDateString("en-US", { weekday: "short" }) + " " + esc(shortDay(m[0].name))}</span>` : ""; })(),
     ago == null ? `<span class="chip warn">No check-ins yet</span>` : `<span class="chip${overdue ? " warn" : ""}">Check-in ${ago === 0 ? "today" : ago === 1 ? "yesterday" : ago + "d ago"}</span>`,
     perWeek ? `<span class="chip">🏋️ ${done}/${perWeek} workouts</span>` : "",
     wat.length ? `<span class="chip">💧 ${waterDays}/7 days</span>` : "",

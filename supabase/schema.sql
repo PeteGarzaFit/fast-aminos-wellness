@@ -18,6 +18,8 @@
 --     the trainer resumes them.
 --   * Water: each client logs their own; trainers can read it.
 --   * Any client can delete their own account and all their data (delete_my_account).
+--   * Habits: clients check off their own and may edit only their own habit list.
+--   * Messages: one thread per client between that client and the trainer.
 --   * Signed-out visitors (anon) can't read or write anything.
 
 create extension if not exists pgcrypto;
@@ -79,6 +81,31 @@ alter table public.clients add column if not exists on_glp1 boolean not null def
 -- and see that they're paused, but can't open or add anything until the trainer
 -- turns coaching back on. Their history is kept.
 alter table public.clients add column if not exists active boolean not null default true;
+
+-- Habits (added October 2026). clients.habits is the list the trainer assigned plus any
+-- the client added: ["steps10k", "sleep7", {"id": "c-1", "label": "Read 10 pages"}].
+-- Habits RENOVO can't measure are checked off by the client in habit_logs.
+alter table public.clients add column if not exists habits jsonb check (habits is null or (jsonb_typeof(habits) = 'array' and pg_column_size(habits) < 8000));
+create table if not exists public.habit_logs (
+  client_id  uuid not null references public.clients(id) on delete cascade,
+  date       date not null,
+  habit_id   text not null check (char_length(habit_id) between 1 and 40),
+  created_at timestamptz not null default now(),
+  primary key (client_id, date, habit_id)
+);
+
+-- Messages between trainer and client (added October 2026). One thread per client.
+create table if not exists public.messages (
+  id         uuid primary key default gen_random_uuid(),
+  client_id  uuid not null references public.clients(id) on delete cascade,
+  sender     uuid default auth.uid() references auth.users(id) on delete set null,
+  from_coach boolean not null default false,
+  body       text not null check (char_length(body) between 1 and 2000),
+  created_at timestamptz not null default now(),
+  read_at    timestamptz
+);
+create index if not exists messages_client_time on public.messages (client_id, created_at desc);
+create index if not exists messages_sender on public.messages (sender);
 
 -- Daily water (added October 2026). One row per client per day, in ounces.
 -- water_goal_oz is set by the trainer; when empty the tracker uses half the
@@ -316,6 +343,42 @@ drop trigger if exists water_daily_stamp on public.water_daily;
 create trigger water_daily_stamp before insert or update on public.water_daily
   for each row execute function private.water_daily_stamp();
 
+-- Clients may change only their own habit list; everything else on their record stays the trainer's.
+create or replace function private.clients_client_guard() returns trigger
+language plpgsql security definer set search_path = '' as $$
+declare h jsonb := new.habits;
+begin
+  if not private.is_trainer() then
+    new := old;
+    new.habits := h;
+  end if;
+  return new;
+end $$;
+drop trigger if exists clients_client_guard on public.clients;
+create trigger clients_client_guard before update on public.clients
+  for each row execute function private.clients_client_guard();
+
+-- Messages: sender and side are always set by the database; after sending, only read_at
+-- can change, and only by the person the message was sent to.
+create or replace function private.messages_guard() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  if tg_op = 'INSERT' then
+    new.sender := (select auth.uid());
+    new.from_coach := private.is_trainer();
+    new.created_at := now();
+    new.read_at := null;
+  else
+    if old.sender = (select auth.uid()) then raise exception 'You can''t edit a sent message'; end if;
+    new.id := old.id; new.client_id := old.client_id; new.sender := old.sender;
+    new.from_coach := old.from_coach; new.body := old.body; new.created_at := old.created_at;
+  end if;
+  return new;
+end $$;
+drop trigger if exists messages_guard on public.messages;
+create trigger messages_guard before insert or update on public.messages
+  for each row execute function private.messages_guard();
+
 -- Only signed-in users may run the two lookup helpers (policies need them).
 -- Nobody calls the trigger functions directly.
 revoke all on all functions in schema private from public, anon, authenticated;
@@ -327,7 +390,7 @@ grant execute on function private.my_client_ids_any() to authenticated;
 -- ---------- Data API access ----------
 -- New Supabase projects don't expose new tables automatically, so grant
 -- signed-in users access explicitly. Row level security below decides which rows.
-revoke all on public.trainers, public.clients, public.checkins, public.client_plans, public.plan_templates, public.workout_logs, public.health_daily, public.water_daily from anon;
+revoke all on public.trainers, public.clients, public.checkins, public.client_plans, public.plan_templates, public.workout_logs, public.health_daily, public.water_daily, public.habit_logs, public.messages from anon;
 grant select on public.trainers to authenticated;
 grant select, insert, update, delete on public.clients to authenticated;
 grant select, insert, update, delete on public.checkins to authenticated;
@@ -336,6 +399,8 @@ grant select, insert, update, delete on public.plan_templates to authenticated;
 grant select, insert, update, delete on public.workout_logs to authenticated;
 grant select, insert, update, delete on public.health_daily to authenticated;
 grant select, insert, update, delete on public.water_daily to authenticated;
+grant select, insert, update, delete on public.habit_logs to authenticated;
+grant select, insert, update, delete on public.messages to authenticated;
 
 -- ---------- row level security ----------
 alter table public.trainers enable row level security;
@@ -346,6 +411,8 @@ alter table public.plan_templates enable row level security;
 alter table public.workout_logs enable row level security;
 alter table public.health_daily enable row level security;
 alter table public.water_daily enable row level security;
+alter table public.habit_logs enable row level security;
+alter table public.messages enable row level security;
 
 drop policy if exists "trainers read self" on public.trainers;
 create policy "trainers read self" on public.trainers
@@ -470,6 +537,36 @@ drop policy if exists "water delete" on public.water_daily;
 create policy "water delete" on public.water_daily
   for delete to authenticated
   using ((select private.is_trainer()) or client_id in (select private.my_client_ids()));
+
+drop policy if exists "clients update own habits" on public.clients;
+create policy "clients update own habits" on public.clients
+  for update to authenticated
+  using (id in (select private.my_client_ids())) with check (id in (select private.my_client_ids()));
+
+drop policy if exists "habits read" on public.habit_logs;
+create policy "habits read" on public.habit_logs
+  for select to authenticated
+  using ((select private.is_trainer()) or client_id in (select private.my_client_ids()));
+drop policy if exists "habits write own" on public.habit_logs;
+create policy "habits write own" on public.habit_logs
+  for insert to authenticated with check (client_id in (select private.my_client_ids()));
+drop policy if exists "habits delete own" on public.habit_logs;
+create policy "habits delete own" on public.habit_logs
+  for delete to authenticated using (client_id in (select private.my_client_ids()));
+
+drop policy if exists "messages read" on public.messages;
+create policy "messages read" on public.messages
+  for select to authenticated
+  using ((select private.is_trainer()) or client_id in (select private.my_client_ids()));
+drop policy if exists "messages send" on public.messages;
+create policy "messages send" on public.messages
+  for insert to authenticated
+  with check ((select private.is_trainer()) or client_id in (select private.my_client_ids()));
+drop policy if exists "messages mark read" on public.messages;
+create policy "messages mark read" on public.messages
+  for update to authenticated
+  using ((select private.is_trainer()) or client_id in (select private.my_client_ids()))
+  with check ((select private.is_trainer()) or client_id in (select private.my_client_ids()));
 
 drop policy if exists "templates trainer only" on public.plan_templates;
 create policy "templates trainer only" on public.plan_templates

@@ -692,6 +692,7 @@ function wire(c, s) {
   });
   $$("[data-reply]").forEach(b => b.onclick = () => openReply(c, S.checkins.find(x => x.id === b.dataset.reply)));
   $$("[data-metric]").forEach(b => b.onclick = () => { S.metric = b.dataset.metric; render(); });
+  $$("#planWhere [data-where]").forEach(b => b.onclick = () => { setWhere(b.dataset.where); render(); });
   const lp = $("#liftPick"); if (lp) lp.onchange = () => { S.lift = lp.value; const card = document.querySelector(".strength"); if (card) { card.outerHTML = strengthCard(); wire(c, s); } };
   $$("[data-trend]").forEach(b => b.onclick = () => { S.trend = b.dataset.trend; const card = document.querySelector(".trends"); if (card) { card.outerHTML = trendsCard(); wire(c, s); } });
   $$("[data-tspan]").forEach(b => b.onclick = () => { S.trendSpan = +b.dataset.tspan; const card = document.querySelector(".trends"); if (card) { card.outerHTML = trendsCard(); wire(c, s); } });
@@ -1344,6 +1345,60 @@ function exPics(name, ref) {
   const u = refUrl(ref), inner = img(0, "start") + img(1, "finish");
   return u ? `<a class="xpics" href="${u}" target="_blank" rel="noopener" aria-label="${esc(name)} form tips">${inner}</a>` : `<div class="xpics">${inner}</div>`;
 }
+/* ---------- gym / home switch ---------- */
+/* Each gym exercise's at-home version (bodyweight or a pair of dumbbells), from the site's home workouts.
+   reps is set only when the home move needs a different rep range (bodyweight moves need more reps). */
+const HOME_SWAP = {
+  "barbell or dumbbell bench press": { name: "Push-Up", ref: "chest/home", reps: "8–15", note: "Feet on a chair or a slow 3-second lowering makes it harder." },
+  "dumbbell bench press": { name: "Push-Up", ref: "chest/home", reps: "8–15" },
+  "incline dumbbell press": { name: "Decline Push-Up", ref: "chest/home", reps: "6–12" },
+  "machine or weighted dip": { name: "Chair Dip", ref: "arms/home", reps: "8–15" },
+  "cable or dumbbell fly": { name: "Wide Push-Up", ref: "chest/home", reps: "8–12" },
+  "close grip bench press": { name: "Close-Grip Push-Up", ref: "arms/home", reps: "8–15" },
+  "pull up or lat pulldown": { name: "Table Inverted Row", ref: "back/home", reps: "6–12" },
+  "lat pulldown or pull up": { name: "Table Inverted Row", ref: "back/home", reps: "6–12" },
+  "barbell or dumbbell row": { name: "Bent-Over Row", ref: "back/home", note: "Dumbbells or a loaded backpack." },
+  "seated cable row": { name: "Bent-Over Row", ref: "back/home", note: "Dumbbells or a loaded backpack." },
+  "face pull": { name: "Bent-Over Rear Delt Raise", ref: "shoulders/home", reps: "15" },
+  "rear delt fly": { name: "Bent-Over Rear Delt Raise", ref: "shoulders/home" },
+  "seated dumbbell shoulder press": { name: "Shoulder Press", ref: "shoulders/home" },
+  "dumbbell lateral raise": { name: "Lateral Raise", ref: "shoulders/home" },
+  "cable upright row": { name: "Upright Row", ref: "shoulders/home" },
+  "ez bar curl": { name: "Biceps Curl", ref: "arms/home" },
+  "incline dumbbell curl": { name: "Biceps Curl", ref: "arms/home" },
+  "overhead cable or dumbbell triceps extension": { name: "Triceps Kickback", ref: "arms/home" },
+  "triceps pushdown": { name: "Triceps Kickback", ref: "arms/home" },
+  "hammer curl": { name: "Hammer Curl", ref: "arms/home" },
+  "back squat or goblet squat": { name: "Bodyweight Squat", ref: "legs/home", reps: "15–20", note: "Hold a dumbbell at your chest (goblet) once 20 reps feels easy." },
+  "goblet or back squat": { name: "Bodyweight Squat", ref: "legs/home", reps: "15–20", note: "Hold a dumbbell at your chest (goblet) once 20 reps feels easy." },
+  "romanian deadlift": { name: "Backpack Romanian Deadlift", ref: "back/home", reps: "10–12" },
+  "leg press": { name: "Step-Up", ref: "legs/home", reps: "10 per leg" },
+  "walking lunge": { name: "Reverse Lunge", ref: "legs/home", reps: "10 per leg" },
+  "lying or seated leg curl": { name: "Single-Leg Romanian Deadlift", ref: "legs/home", reps: "8–10 per leg" },
+  "standing calf raise": { name: "Single-Leg Calf Raise", ref: "legs/home", reps: "12–15 per leg" },
+  "barbell hip thrust": { name: "Single-Leg Glute Bridge", ref: "glutes/home", reps: "10–12 per leg" },
+  "bulgarian split squat": { name: "Couch Bulgarian Split Squat", ref: "glutes/home" },
+  "cable kickback": { name: "Donkey Kick", ref: "glutes/home", reps: "15 per leg" },
+  "hip abduction machine or banded walk": { name: "Side Leg Raise", ref: "glutes/home", reps: "15–20 per leg" },
+  "hanging or captain s chair knee raise": { name: "Reverse Crunch", ref: "core/home", reps: "12–15" },
+  "cable woodchop": { name: "Mountain Climbers", ref: "core/home", reps: "30 sec" },
+  "farmer s carry": { name: "Suitcase Carry", ref: "", reps: "30 sec each side", note: "One dumbbell or a loaded bag at your side. Walk tall." },
+  "dumbbell shrug": { name: "Dumbbell Shrug", ref: "shoulders" },
+  "single arm dumbbell row": { name: "Single-Arm Dumbbell Row", ref: "back" },
+  "plank": { name: "Plank", ref: "core/home" }, "dead bug": { name: "Dead Bug", ref: "core/home" }, "side plank": { name: "Side Plank", ref: "core/home" }
+};
+const normName = n => String(n || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+function homeItem(x) {
+  const m = HOME_SWAP[normName(x.name)]; if (!m) return x;
+  return { ...x, name: m.name, ref: m.ref, reps: m.reps || x.reps, rir: m.reps ? "" : x.rir, note: m.note || "", gymName: x.name };
+}
+/* Gym or home, remembered per device. Home swaps every exercise that has an at-home version. */
+const whereKey = () => `rv_where_${S.sel || ""}`;
+const getWhere = () => store.get(whereKey()) === "home" ? "home" : "gym";
+const setWhere = w => store.set(whereKey(), w);
+const placeItem = (x, where) => where === "home" ? homeItem(x) : x;
+const whereSeg = (id, where) => `<div class="seg wtoggle" role="group" aria-label="Where are you training?" id="${id}"><button type="button" data-where="gym" aria-pressed="${where === "gym"}">🏋️ Gym</button><button type="button" data-where="home" aria-pressed="${where === "home"}">🏠 Home</button></div>`;
+
 /* ---------- programs: weeks, phases and progression ---------- */
 /* A program lives on the plan as { name, weeks, daysPerWeek, start, phases: [{ from, to, name, note, deload, peak, main: {sets, reps, rir, rest}, acc: {sets, reps, rir, rest} }] }.
    Exercises tagged kind "main" or "acc" take this week's sets, reps and effort; everything else (walks, carries) stays as written. */
@@ -1371,12 +1426,12 @@ function progBar(p) {
 
 function planDays(p) {
   const canLog = !S.workoutsMissing;
-  const wk = progWeek(p.program);
+  const wk = progWeek(p.program), where = getWhere();
   return `<div class="days">${p.days.map((d, i) => `<div class="day"><div class="day-h"><span class="dnum">Day ${i + 1}</span><h3>${esc(d.name || "Workout")}</h3>${canLog ? `<button type="button" class="btn primary sm startw" data-start="${i}">${S.isTrainer ? "Log workout" : "Start workout"}</button>` : ""}${lastDone(d.name)}</div>
-    <ol class="plist">${(d.items || []).map(x0 => { const x = itemForWeek(x0, p.program, wk), u = refUrl(x.ref);
+    <ol class="plist">${(d.items || []).map(x0 => { const x = placeItem(itemForWeek(x0, p.program, wk), where), u = refUrl(x.ref);
       const sr = [x.sets ? `${esc(x.sets)} × ${esc(x.reps || "")}` : esc(x.reps || ""), x.rir ? `${esc(x.rir)} in the tank` : "", x.rest ? `rest ${esc(x.rest)}` : ""].filter(Boolean).join(" · ");
       const pics = exPics(x.name, x.ref);
-      return `<li${pics ? ` class="haspic"` : ""}>${pics}<div class="ptxt"><div class="pname">${esc(x.name)}${x.kind === "main" ? ` <span class="mtag">Main lift</span>` : ""}</div>${sr ? `<div class="psr">${sr}</div>` : ""}${x.note ? `<div class="pnote">${esc(x.note)}</div>` : ""}${u ? `<a class="plink" href="${u}" target="_blank" rel="noopener">Form tips →</a>` : ""}</div></li>`; }).join("")}</ol></div>`).join("")}</div>`;
+      return `<li${pics ? ` class="haspic"` : ""}>${pics}<div class="ptxt"><div class="pname">${esc(x.name)}${x.kind === "main" ? ` <span class="mtag">Main lift</span>` : ""}</div>${x.gymName ? `<div class="pnote">Home swap for ${esc(x.gymName)}</div>` : ""}${sr ? `<div class="psr">${sr}</div>` : ""}${x.note ? `<div class="pnote">${esc(x.note)}</div>` : ""}${u ? `<a class="plink" href="${u}" target="_blank" rel="noopener">Form tips →</a>` : ""}</div></li>`; }).join("")}</ol></div>`).join("")}</div>`;
 }
 function planCard(c) {
   if (S.planMissing) return S.isTrainer ? `<section class="card"><div class="card-h"><h2>Workout plan</h2></div><div class="empty">Workout plans and check-in replies need a one-time database update. Run <code>supabase/schema.sql</code> again in the Supabase SQL Editor, then reload. Steps are in <code>tracker/SETUP.md</code>.</div></section>` : "";
@@ -1386,7 +1441,7 @@ function planCard(c) {
   }
   return `<section class="card plan"><div class="card-h"><div><div class="kicker">${S.isTrainer ? "Workout plan" : `Your plan from ${esc(TRAINER)}`}</div><h2>${esc(p.title || "Workout plan")}</h2></div>
     ${S.isTrainer ? `<button class="btn" id="editPlan" type="button">Edit plan</button>` : (p.updatedAt ? `<span class="muted small">Updated ${fmtD(String(p.updatedAt).slice(0, 10), true)}</span>` : "")}</div>
-    ${progBar(p)}${p.notes ? `<p class="summary">${esc(p.notes)}</p>` : ""}${planDays(p)}</section>`;
+    ${progBar(p)}<div class="where-row"><span class="small muted">Training today at</span>${whereSeg("planWhere", getWhere())}</div>${p.notes ? `<p class="summary">${esc(p.notes)}</p>` : ""}${planDays(p)}</section>`;
 }
 
 /* Reply dialog (trainer). */
@@ -1552,15 +1607,27 @@ let wDraft = null, wClient = null;
 function openWorkout(c, dayIdx) {
   const day = S.plan.days[dayIdx]; wClient = c;
   const pr = S.plan.program, wk = progWeek(pr), inProg = pr && wk >= 1 && wk <= pr.weeks;
-  wDraft = { clientId: c.id, date: todayISO(), dayName: day.name || `Day ${dayIdx + 1}`, note: "", program: inProg ? progKey(pr) : "", week: inProg ? wk : null,
-    entries: day.items.map(x0 => itemForWeek(x0, pr, wk)).map(x => ({ name: x.name, ref: x.ref || "", target: [x.sets ? `${x.sets} ×` : "", x.reps || ""].join(" ").trim() + (x.rir ? ` · ${x.rir} in the tank` : ""), timed: isTimed(x), done: false,
+  const base = day.items.map(x0 => itemForWeek(x0, pr, wk)), where = getWhere();
+  wDraft = { clientId: c.id, date: todayISO(), dayName: day.name || `Day ${dayIdx + 1}`, note: "", program: inProg ? progKey(pr) : "", week: inProg ? wk : null, base, where,
+    entries: base.map(x0 => placeItem(x0, where)).map(x => ({ name: x.name, ref: x.ref || "", target: [x.sets ? `${x.sets} ×` : "", x.reps || ""].join(" ").trim() + (x.rir ? ` · ${x.rir} in the tank` : ""), timed: isTimed(x), done: false,
       sets: isTimed(x) ? [] : Array.from({ length: nSets(x) }, () => ({ lb: "", reps: "" })), plan: x })) };
   $("#wTitle").textContent = (wDraft.week ? `Week ${wDraft.week} · ` : "") + wDraft.dayName;
   $("#wSub").textContent = S.isTrainer ? `Logging for ${firstName(c.name)}` : "Log each set as you go. Leave a set blank if you skipped it.";
   $("#w-date").value = wDraft.date; $("#w-date").max = todayISO(); $("#w-note").value = ""; $("#wErr").textContent = "";
   drawWorkout(); stopRest(); $("#dlgWorkout").showModal(); keepAwake();
 }
+/* Switch an open workout between gym and home; sets already typed stay where they are. */
+function switchWhere(where) {
+  if (wDraft.where === where) return;
+  wDraft.where = where; setWhere(where);
+  wDraft.entries = wDraft.entries.map((e, i) => { const x = placeItem(wDraft.base[i], where);
+    return { ...e, name: x.name, ref: x.ref || "", target: [x.sets ? `${x.sets} ×` : "", x.reps || ""].join(" ").trim() + (x.rir ? ` · ${x.rir} in the tank` : ""), timed: isTimed(x), plan: x,
+      sets: isTimed(x) ? [] : (e.sets.length ? e.sets : Array.from({ length: nSets(x) }, () => ({ lb: "", reps: "" }))) }; });
+  drawWorkout(); render();
+}
 function drawWorkout() {
+  const ws = $("#wWhere"); if (ws) ws.outerHTML = whereSeg("wWhere", wDraft.where); else $("#wList").insertAdjacentHTML("beforebegin", whereSeg("wWhere", wDraft.where));
+  $$("#wWhere [data-where]").forEach(b => b.onclick = () => switchWhere(b.dataset.where));
   $("#wList").innerHTML = wDraft.entries.map((e, ei) => {
     const prev = lastFor(e.name), x = e.plan;
     const last = prev ? `<div class="wlast">Last time (${fmtD(prev.w.date)}): <b>${prev.e.sets.filter(st => st.reps != null).map(fmtSet).join(", ")}</b></div>` : "";

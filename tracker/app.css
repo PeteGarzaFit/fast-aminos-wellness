@@ -512,3 +512,9 @@ fieldset.macros legend{font-size:13px;font-weight:700;padding:0 4px;color:var(--
 .bnt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;font-size:13px}
 .bnt span{color:var(--muted);font-size:12px}
 .bnt .sc-bar{height:5px}
+
+/* Gym / home switch */
+.where-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 10px}
+.wtoggle button{font-size:14px;padding:6px 12px}
+#wWhere{margin:4px 0 10px;width:100%;display:grid;grid-template-columns:1fr 1fr}
+#wWhere button{padding:8px}

@@ -198,7 +198,7 @@ function supaApi(sb) {
         safe(sb.from("checkins").select("client_id,date,coach_note,created_at,weight_lb").gte("date", daysBack(120).pop()).order("date", { ascending: false }).limit(3000)),
         safe(sb.from("workout_logs").select("client_id,date,day_name").gte("date", since)),
         safe(sb.from("water_daily").select("client_id,date,oz").gte("date", since)),
-        safe(sb.from("health_daily").select("client_id,date,steps,sleep_hours").gte("date", since)),
+        safe(sb.from("health_daily").select("*").gte("date", daysBack(32).pop())),
         safe(sb.from("client_plans").select("client_id,days"))]);
       return { checkins, workouts, water, health, plans };
     },
@@ -245,7 +245,7 @@ function demoApi(asClient) {
   let workouts = [logDay("2026-09-07", 0, 0), logDay("2026-09-08", 1, 0), logDay("2026-09-14", 0, 1), logDay("2026-09-15", 1, 1), logDay("2026-09-21", 0, 2), logDay("2026-09-22", 1, 2), logDay("2026-09-28", 0, 3), logDay("2026-09-29", 1, 3)];
   /* Sample Apple Health days for the demo client, newest first. */
   const health = Array.from({ length: 21 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - i); const iso = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
-    return { date: iso, steps: 7000 + ((i * 1337) % 4200), sleepH: 6.4 + ((i * 7) % 12) / 10, weight: +(154.6 + i * 0.12).toFixed(1), kcal: 380 + ((i * 53) % 260), exMin: 22 + ((i * 11) % 35), rhr: 61 + (i % 4), kcalIn: i === 0 ? 1180 : 1700 + ((i * 97) % 300), protein: i === 0 ? 96 : 120 + ((i * 7) % 30), carbs: i === 0 ? 104 : 150 + ((i * 13) % 40), fat: i === 0 ? 41 : 55 + ((i * 5) % 15), updatedAt: "2026-10-01T07:30:00Z" }; });
+    return { date: iso, steps: 7000 + ((i * 1337) % 4200), sleepH: 6.4 + ((i * 7) % 12) / 10, weight: +(154.6 + i * 0.12).toFixed(1), kcal: 380 + ((i * 53) % 260), exMin: 22 + ((i * 11) % 35), rhr: 61 + (i % 4), hrv: i === 0 ? 54 : 42 + ((i * 7) % 11), kcalIn: i === 0 ? 1180 : 1700 + ((i * 97) % 300), protein: i === 0 ? 96 : 120 + ((i * 7) % 30), carbs: i === 0 ? 104 : 150 + ((i * 13) % 40), fat: i === 0 ? 41 : 55 + ((i * 5) % 15), updatedAt: "2026-10-01T07:30:00Z" }; });
   /* Sample water: today partly done, the last two weeks mostly near goal. */
   const water = Array.from({ length: 14 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - i); return { date: d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()), oz: i === 0 ? 32 : [80, 64, 72, 88, 56, 80, 72, 64, 88, 80, 72, 48, 80][i - 1] }; });
   const templates = [{ id: "t1", name: "Sample 3-day plan", title: plans.c1.title, notes: plans.c1.notes, days: JSON.parse(JSON.stringify(plans.c1.days)) }];
@@ -272,7 +272,7 @@ function demoApi(asClient) {
     async overview() { await wait();
       return { checkins: entries.map(e => ({ client_id: e.clientId, date: e.date, coach_note: e.coachNote, created_at: e.createdAt, weight_lb: e.weight })),
         workouts: workouts.map(w => ({ client_id: w.clientId, date: w.date, day_name: w.dayName })), water: water.map(w => ({ client_id: "c1", date: w.date, oz: w.oz })),
-        health: health.map(h => ({ client_id: "c1", date: h.date, steps: h.steps, sleep_hours: h.sleepH })), plans: Object.entries(plans).map(([k, v]) => ({ client_id: k, days: v.days })) }; },
+        health: health.map(h => ({ client_id: "c1", date: h.date, steps: h.steps, sleep_hours: h.sleepH, hrv_ms: h.hrv, resting_hr: h.rhr, active_kcal: h.kcal, exercise_min: h.exMin })), plans: Object.entries(plans).map(([k, v]) => ({ client_id: k, days: v.days })) }; },
     async listWater(id) { await wait(); return id === "c1" ? water.map(w => ({ ...w })) : []; },
     async setWater(id, date, oz) { await wait(); const w = water.find(x => x.date === date); if (w) w.oz = oz; else { water.push({ date, oz }); water.sort((a, b) => b.date.localeCompare(a.date)); } },
     async listWorkouts(id) { await wait(); return workouts.filter(w => w.clientId === id).sort((a, b) => b.date.localeCompare(a.date) || String(b.createdAt).localeCompare(String(a.createdAt))).map(w => JSON.parse(JSON.stringify(w))); },
@@ -348,7 +348,7 @@ function render() {
   }
   if (!S.clients.length) { app.innerHTML = welcome(); const b = $("#welcomeAdd"); if (b) b.onclick = () => openClient(null); return; }
   const c = client(); const s = series(c, S.checkins);
-  app.innerHTML = `<div class="stack">${head(c, s)}${coachCallout(c)}${scoreCard(c)}${healthCard(c)}${waterCard(c)}${fuelCard(c)}${trendsCard()}${tiles(c, s)}${s.rows.length ? calNote(c, s) : ""}${planCard(c)}${workoutsCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div>${RENOVO && !S.isTrainer ? shopCard() : ""}${acctFoot()}</div>`;
+  app.innerHTML = `<div class="stack">${head(c, s)}${coachCallout(c)}${todayCard(c)}${scoreCard(c)}${healthCard(c)}${waterCard(c)}${fuelCard(c)}${trendsCard()}${tiles(c, s)}${s.rows.length ? calNote(c, s) : ""}${planCard(c)}${workoutsCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div>${RENOVO && !S.isTrainer ? shopCard() : ""}${acctFoot()}</div>`;
   wire(c, s);
   const da = $("#delAcct"); if (da) da.onclick = openDeleteAccount;
 }
@@ -1027,6 +1027,61 @@ function fuelCard(c) {
     ${top}<div class="fuel-macros">${macro("protein", "Protein", today.protein, c.proteinGoal)}${macro("carbs", "Carbs", today.carbs, c.carbsGoal)}${macro("fat", "Fat", today.fat, c.fatGoal)}</div></section>`;
 }
 
+/* ---------- daily Recovery / Sleep / Strain (personal baselines, like Bevel or WHOOP) ---------- */
+const lerp = (x, pts) => { if (x <= pts[0][0]) return pts[0][1]; for (let i = 1; i < pts.length; i++) { const [x0, y0] = pts[i - 1], [x1, y1] = pts[i]; if (x <= x1) return y0 + (y1 - y0) * (x - x0) / (x1 - x0); } return pts[pts.length - 1][1]; };
+const sd = a => { const m = avg(a); return a.length > 1 ? Math.sqrt(a.reduce((s, v) => s + (v - m) ** 2, 0) / (a.length - 1)) : 0; };
+function dailyScores(health) {
+  const t = todayISO(), by = {}; health.forEach(h => { by[h.date] = h; });
+  const today = by[t] || {};
+  const prior = daysBack(31).slice(1).map(d => by[d]).filter(Boolean);
+  const base = k => { const v = prior.map(h => h[k]).filter(x => x != null); return v.length >= 5 ? avg(v) : null; };
+  // Sleep: last night's hours vs an 8-hour need, plus how steady the last 7 nights were.
+  let sleep = null;
+  if (today.sleepH != null) {
+    const wk = daysBack(7).map(d => by[d]?.sleepH).filter(x => x != null);
+    const steady = wk.length >= 3 ? Math.max(0, 1 - sd(wk) / 1.5) : 0.7;
+    sleep = { score: Math.round(Math.min(1, today.sleepH / 8) * 85 + steady * 15), hours: today.sleepH };
+  }
+  // Recovery: HRV vs your 30-day normal (half), resting heart rate vs normal (quarter), sleep (quarter).
+  const hb = base("hrv"), rb = base("rhr"), parts = [];
+  let hrvPct = null;
+  if (today.hrv != null && hb) { hrvPct = (today.hrv / hb - 1) * 100; parts.push([50, lerp(today.hrv / hb, [[0.7, 0], [1, 60], [1.2, 100]])]); }
+  if (today.rhr != null && rb) parts.push([25, lerp(rb - today.rhr, [[-8, 0], [0, 60], [5, 100]])]);
+  if (sleep && parts.length) parts.push([25, sleep.score]);
+  const tw = parts.reduce((a, p) => a + p[0], 0);
+  const recovery = tw ? Math.round(parts.reduce((a, p) => a + p[0] * p[1], 0) / tw) : null;
+  // Strain (0–21): today's load (active calories + exercise minutes) on a curve set by your usual day.
+  const load = h => h && (h.kcal != null || h.exMin != null) ? (h.kcal || 0) + 4 * (h.exMin || 0) : null;
+  const loads = prior.map(load).filter(x => x != null);
+  const k = loads.length >= 5 ? avg(loads) * 1.2 : 700;
+  const tl = load(today);
+  const strain = tl == null ? null : Math.round(21 * (1 - Math.exp(-tl / k)) * 10) / 10;
+  return { recovery, sleep, strain, hrvPct, hrv: today.hrv, hrvBase: hb, rhr: today.rhr, rhrBase: rb, kcal: today.kcal, exMin: today.exMin, calibrating: !hb && today.hrv != null };
+}
+const recBand = r => r >= 67 ? { c: "#1683ff", t: "Ready to push" } : r >= 34 ? { c: "#f5a524", t: "Train normal" } : { c: "#e5484d", t: "Take it easy" };
+const strainBand = s => s >= 18 ? "All out" : s >= 14 ? "High" : s >= 10 ? "Moderate" : "Light";
+function todayCard(c) {
+  if (S.healthMissing || !S.health.length) return "";
+  const d = dailyScores(S.health);
+  if (d.recovery == null && !d.sleep && d.strain == null) return "";
+  const txt = (y, s, size, w) => `<text x="50" y="${y}" text-anchor="middle" font-size="${size}" font-weight="${w || 800}" fill="${w ? "var(--muted)" : "var(--ink)"}">${s}</text>`;
+  const cell = (label, ring, sub) => `<div class="dcell">${ring}<span class="dl">${label}</span><span class="ds">${sub}</span></div>`;
+  const rb = d.recovery != null ? recBand(d.recovery) : null;
+  const rec = cell("Recovery", arc(d.recovery ?? 0, 92, rb ? rb.c : "var(--grid)", d.recovery != null ? txt(56, d.recovery + "%", 24) : txt(56, "–", 24)),
+    d.recovery != null ? `<b style="color:${rb.c}">${rb.t}</b>` : d.calibrating ? "Learning your normal" : "Needs HRV");
+  const slp = cell("Sleep", arc(d.sleep ? d.sleep.score : 0, 92, "#6d6bff", d.sleep ? txt(56, d.sleep.score, 24) : txt(56, "–", 24)), d.sleep ? `${f1(d.sleep.hours)} h` : "No data");
+  const str = cell("Strain", arc(d.strain != null ? d.strain / 21 * 100 : 0, 92, "#38c4f0", d.strain != null ? txt(56, f1(d.strain), 24) : txt(56, "–", 24)), d.strain != null ? strainBand(d.strain) + " so far" : "No data");
+  let tip = "";
+  const who = S.isTrainer ? firstName(c.name) + "'s" : "Your";
+  if (d.recovery != null) {
+    const hv = d.hrvPct != null ? `HRV ${Math.abs(Math.round(d.hrvPct))}% ${d.hrvPct >= 0 ? "above" : "below"} ${S.isTrainer ? "normal" : "your normal"}` : `${who} body is recovering`;
+    tip = d.recovery >= 67 ? `${hv}. Good day to push heavy.` : d.recovery >= 34 ? `${hv}. Train as planned.` : `${hv}${d.sleep && d.sleep.hours < 6.5 ? " and short sleep" : ""}. Keep it lighter: Zone 2 and mobility.`;
+  } else if (d.calibrating) tip = "Wear your watch to sleep for a few nights. Recovery appears once RENOVO learns your normal HRV.";
+  const detail = [d.hrv != null ? `HRV <b>${d.hrv} ms</b>${d.hrvBase ? ` (avg ${Math.round(d.hrvBase)})` : ""}` : "", d.rhr != null ? `Resting HR <b>${d.rhr}</b>${d.rhrBase ? ` (avg ${Math.round(d.rhrBase)})` : ""}` : "", d.kcal != null ? `<b>${d.kcal}</b> active cal` : ""].filter(Boolean).join("<span class='dot'>·</span>");
+  return `<section class="card today"><div class="card-h"><div><div class="kicker">${S.isTrainer ? "Today" : "Your day"}</div><h2>${new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}</h2></div></div>
+    <div class="dgrid">${rec}${slp}${str}</div>${tip ? `<p class="dtip">${esc(tip)}</p>` : ""}${detail ? `<p class="ddetail">${detail}</p>` : ""}</section>`;
+}
+
 /* ---------- weekly score + trends ---------- */
 const isoOf = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
 const daysBack = n => { const t = todayISO(); return Array.from({ length: n }, (_, i) => { const d = toDate(t); d.setDate(d.getDate() - i); return isoOf(d); }); };
@@ -1132,7 +1187,8 @@ function ovRow(c, o) {
     ago == null ? `<span class="chip warn">No check-ins yet</span>` : `<span class="chip${overdue ? " warn" : ""}">Check-in ${ago === 0 ? "today" : ago === 1 ? "yesterday" : ago + "d ago"}</span>`,
     perWeek ? `<span class="chip">🏋️ ${done}/${perWeek} workouts</span>` : "",
     wat.length ? `<span class="chip">💧 ${waterDays}/7 days</span>` : "",
-    steps != null ? `<span class="chip">👟 ${(steps / 1000).toFixed(1)}k steps</span>` : ""
+    steps != null ? `<span class="chip">👟 ${(steps / 1000).toFixed(1)}k steps</span>` : "",
+    (() => { const ds = dailyScores(o.health.filter(h => h.client_id === c.id).map(fromHealthRow)); if (ds.recovery == null) return ""; const b = recBand(ds.recovery); return `<span class="chip" style="color:${b.c};border-color:${b.c}55">⚡ Recovery ${ds.recovery}%</span>`; })()
   ].join("");
   return { c, flags, score, html: `<button type="button" class="ov-row${c.active ? "" : " paused"}" data-open="${esc(c.id)}">
     <span class="ov-ring">${score != null ? ring(score, 54) : `<span class="ov-none">–</span>`}</span>

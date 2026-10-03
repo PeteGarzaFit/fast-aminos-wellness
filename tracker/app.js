@@ -293,7 +293,8 @@ function demoApi(asClient) {
     { id: "m1", clientId: "c1", fromCoach: true, body: "Welcome to the Strength Builder! Week 1 is about finding your weights. Leave 2 reps in the tank.", createdAt: dIso(6) + "T15:02:00Z", readAt: dIso(6) + "T16:00:00Z" },
     { id: "m2", clientId: "c1", fromCoach: false, body: "Thanks! Is it ok to do Friday's workout Saturday this week?", createdAt: dIso(2) + "T18:20:00Z", readAt: dIso(2) + "T19:00:00Z" },
     { id: "m3", clientId: "c1", fromCoach: true, body: "Totally fine. Just keep a rest day before Monday. Great job hitting your protein 6 days straight 🥩", createdAt: dIso(0) + "T13:05:00Z", readAt: null }];
-  const templates = [{ id: "t1", name: "8-Week Strength Builder (4-day Upper/Lower)", title: "8-Week Strength Builder", notes: SB.notes, days: JSON.parse(JSON.stringify(SB.days)), program: JSON.parse(JSON.stringify(SB.program)) }];
+  const HX = {"name": "8-Week HYROX Prep (4-day)", "title": "8-Week HYROX Prep", "notes": "HYROX is 8 × 1 km of running, each followed by a station: SkiErg 1000 m, Sled Push 50 m, Sled Pull 50 m, Burpee Broad Jumps 80 m, Row 1000 m, Farmers Carry 200 m, Sandbag Lunges 100 m and 100 Wall Balls. This plan trains 4 days a week (Mon, Tue, Thu, Sat): strength and sleds, run intervals, compromised running (running on tired legs, the skill that decides most races) and an easy aerobic day. Weeks 1–3 build the base, weeks 4–6 bring race weights and race pace, week 7 is a full race simulation and week 8 is taper and race. Log your times on runs and stations; the app tracks your splits and tells you when you're faster.", "days": [{"name": "Mon · Strength & sleds", "items": [{"name": "Back Squat or Goblet Squat", "sets": "4", "reps": "6–8", "rest": "2–3 min", "note": "Main lift. Strong legs make the sleds and lunges easier.", "ref": "legs", "kind": "main"}, {"name": "Romanian Deadlift", "sets": "3", "reps": "8", "rest": "2 min", "note": "", "ref": "legs", "kind": "main"}, {"name": "Sled Push", "sets": "4", "reps": "25 m", "rest": "90 sec", "note": "Race weight (sled included): men 335 lb (152 kg), women 225 lb (102 kg). No sled? Push a loaded prowler, or a treadmill with the motor off.", "ref": "", "log": "time", "lb": true, "byWeek": [{"from": 1, "to": 3, "sets": "4", "reps": "25 m", "rest": "90 sec", "note": "Moderate weight, short fast steps, arms locked. Race weight (sled included): men 335 lb (152 kg), women 225 lb (102 kg). No sled? Push a loaded prowler, or a treadmill with the motor off."}, {"from": 4, "to": 6, "sets": "5", "reps": "25 m", "rest": "90 sec", "note": "Race weight. Keep the sled moving; stopping costs the most time. Race weight (sled included): men 335 lb (152 kg), women 225 lb (102 kg). No sled? Push a loaded prowler, or a treadmill with the motor off."}, {"from": 7, "to": 7, "sets": "4", "reps": "50 m", "rest": "2 min", "note": "Race weight, race distance. Race weight (sled included): men 335 lb (152 kg), women 225 lb (102 kg). No sled? Push a loaded prowler, or a treadmill with the motor off."}, {"from": 8, "to": 8, "sets": "2", "reps": "25 m", "rest": "2 min", "note": "Race week: light and fast, just to stay sharp."}]}, {"name": "Sled Pull", "sets": "4", "reps": "25 m", "rest": "90 sec", "note": "Race weight (sled included): men 227 lb (103 kg), women 172 lb (78 kg). Hand over hand with a rope, walking backward. No sled? Heavy rope pulls or cable rows.", "ref": "", "log": "time", "lb": true, "byWeek": [{"from": 1, "to": 3, "sets": "4", "reps": "25 m", "rest": "90 sec", "note": "Moderate weight. Sit low, pull with your legs and back, not just arms. Race weight (sled included): men 227 lb (103 kg), women 172 lb (78 kg). Hand over hand with a rope, walking backward. No sled? Heavy rope pulls or cable rows."}, {"from": 4, "to": 6, "sets": "5", "reps": "25 m", "rest": "90 sec", "note": "Race weight. Race weight (sled included): men 227 lb (103 kg), women 172 lb (78 kg). Hand over hand with a rope, walking backward. No sled? Heavy rope pulls or cable rows."}, {"from": 7, "to": 7, "sets": "4", "reps": "50 m", "rest": "2 min", "note": "Race weight, race distance. Race weight (sled included): men 227 lb (103 kg), women 172 lb (78 kg). Hand over hand with a rope, walking backward. No sled? Heavy rope pulls or cable rows."}, {"from": 8, "to": 8, "sets": "2", "reps": "25 m", "rest": "2 min", "note": "Race week: light and fast."}]}, {"name": "Sandbag Walking Lunge", "sets": "3", "reps": "10–12", "rest": "90 sec", "note": "Reps are per leg. Race weight: men 44 lb (20 kg), women 22 lb (10 kg) sandbag on your shoulders. Back knee touches the floor every rep.", "ref": "legs", "kind": "acc"}, {"name": "Farmers Carry", "sets": "4", "reps": "50 m", "rest": "60 sec", "note": "Race weight: men 2 × 53 lb (24 kg), women 2 × 35 lb (16 kg) kettlebells or dumbbells.", "ref": "", "log": "time", "lb": true, "byWeek": [{"from": 1, "to": 3, "sets": "4", "reps": "50 m", "rest": "60 sec", "note": "Tall chest, quick steps. Race weight: men 2 × 53 lb (24 kg), women 2 × 35 lb (16 kg) kettlebells or dumbbells."}, {"from": 4, "to": 6, "sets": "4", "reps": "100 m", "rest": "90 sec", "note": "Race weight, no putting it down. Race weight: men 2 × 53 lb (24 kg), women 2 × 35 lb (16 kg) kettlebells or dumbbells."}, {"from": 7, "to": 7, "sets": "2", "reps": "200 m", "rest": "2 min", "note": "Race weight, race distance. Race weight: men 2 × 53 lb (24 kg), women 2 × 35 lb (16 kg) kettlebells or dumbbells."}, {"from": 8, "to": 8, "sets": "2", "reps": "50 m", "rest": "90 sec", "note": "Race week: easy."}]}]}, {"name": "Tue · Run intervals", "items": [{"name": "Easy jog warm-up", "sets": "1", "reps": "10 min", "rest": "", "note": "Then a few leg swings and 3 quick 20-second strides.", "ref": ""}, {"name": "Run intervals", "sets": "6", "reps": "400 m", "rest": "90 sec", "note": "", "ref": "", "log": "time", "byWeek": [{"from": 1, "to": 3, "sets": "6", "reps": "400 m", "rest": "90 sec", "note": "At about your 5K pace: hard but steady. Log each one and keep them all within a few seconds."}, {"from": 4, "to": 6, "sets": "5", "reps": "1 km", "rest": "2 min", "note": "Your goal race pace or a little faster. Every 1 km the same speed."}, {"from": 7, "to": 7, "sets": "4", "reps": "1 km", "rest": "90 sec", "note": "Race pace. Short rest, like the race."}, {"from": 8, "to": 8, "sets": "3", "reps": "400 m", "rest": "2 min", "note": "Race week: quick and relaxed. Stay sharp, don't get tired."}]}, {"name": "SkiErg", "sets": "4", "reps": "250 m", "rest": "60 sec", "note": "", "ref": "", "log": "time", "byWeek": [{"from": 1, "to": 3, "sets": "4", "reps": "250 m", "rest": "60 sec", "note": "Strong pull with your hips and lats, not just arms. No SkiErg? Use a rower."}, {"from": 4, "to": 6, "sets": "4", "reps": "500 m", "rest": "90 sec", "note": "Race pace. No SkiErg? Use a rower."}, {"from": 7, "to": 7, "sets": "1", "reps": "1000 m", "rest": "", "note": "Race distance at race effort. No SkiErg? Use a rower."}, {"from": 8, "to": 8, "sets": "2", "reps": "250 m", "rest": "90 sec", "note": "Race week: easy and smooth."}]}, {"name": "Cool-down walk", "sets": "1", "reps": "5–10 min", "rest": "", "note": "", "ref": ""}]}, {"name": "Wed · Rest", "items": [{"name": "Rest", "sets": "", "reps": "Easy walk, stretch, foam roll", "rest": "", "note": "", "ref": ""}]}, {"name": "Thu · Compromised running", "items": [{"name": "Run", "sets": "3", "reps": "500 m", "rest": "", "note": "", "ref": "", "log": "time", "byWeek": [{"from": 1, "to": 3, "sets": "3", "reps": "500 m", "rest": "", "note": "Circuit: run, then straight into Wall Balls, Burpee Broad Jumps and Row, then run again. That's one round; rest 2 minutes between rounds. Running on tired legs is the #1 skill in HYROX."}, {"from": 4, "to": 6, "sets": "4", "reps": "1 km", "rest": "", "note": "Circuit: 1 km run, then Wall Balls, Burpee Broad Jumps and Row, then run again. Rest 2 minutes between rounds. Hold your run pace even when your legs are heavy."}, {"from": 7, "to": 7, "sets": "4", "reps": "1 km", "rest": "", "note": "Circuit at race pace. Rest only 90 seconds between rounds."}, {"from": 8, "to": 8, "sets": "2", "reps": "500 m", "rest": "", "note": "Race week: 2 easy rounds, just to rehearse."}]}, {"name": "Wall Balls", "sets": "3", "reps": "20", "rest": "", "note": "Race standard: men 14 lb ball to a 10 ft target, women 9 lb ball to 9 ft. Full squat below parallel every rep.", "ref": "", "lb": true, "byWeek": [{"from": 1, "to": 3, "sets": "3", "reps": "20", "rest": "", "note": "Race standard: men 14 lb ball to a 10 ft target, women 9 lb ball to 9 ft. Full squat below parallel every rep."}, {"from": 4, "to": 6, "sets": "4", "reps": "25", "rest": "", "note": "Try to go unbroken. Race standard: men 14 lb ball to a 10 ft target, women 9 lb ball to 9 ft. Full squat below parallel every rep."}, {"from": 7, "to": 7, "sets": "4", "reps": "25", "rest": "", "note": "Unbroken. Race standard: men 14 lb ball to a 10 ft target, women 9 lb ball to 9 ft. Full squat below parallel every rep."}, {"from": 8, "to": 8, "sets": "2", "reps": "15", "rest": "", "note": "Race standard: men 14 lb ball to a 10 ft target, women 9 lb ball to 9 ft. Full squat below parallel every rep."}]}, {"name": "Burpee Broad Jumps", "sets": "3", "reps": "20 m", "rest": "", "note": "", "ref": "", "log": "time", "byWeek": [{"from": 1, "to": 3, "sets": "3", "reps": "20 m", "rest": "", "note": "Chest to the floor, then jump forward with both feet. Find a steady rhythm you can hold."}, {"from": 4, "to": 6, "sets": "4", "reps": "20 m", "rest": "", "note": "Steady rhythm, no long pauses on the floor."}, {"from": 7, "to": 7, "sets": "4", "reps": "20 m", "rest": "", "note": "Race rhythm."}, {"from": 8, "to": 8, "sets": "2", "reps": "10 m", "rest": "", "note": "Easy."}]}, {"name": "Row", "sets": "3", "reps": "250 m", "rest": "2 min", "note": "", "ref": "", "log": "time", "byWeek": [{"from": 1, "to": 3, "sets": "3", "reps": "250 m", "rest": "2 min", "note": "Legs, then body, then arms. Rest 2 minutes after this, then start the next round."}, {"from": 4, "to": 6, "sets": "4", "reps": "500 m", "rest": "2 min", "note": "Race pace, then rest 2 minutes and start the next round."}, {"from": 7, "to": 7, "sets": "4", "reps": "500 m", "rest": "90 sec", "note": "Race pace, then 90 seconds and go again."}, {"from": 8, "to": 8, "sets": "2", "reps": "250 m", "rest": "2 min", "note": "Easy."}]}]}, {"name": "Fri · Rest", "items": [{"name": "Rest", "sets": "", "reps": "Rest or an easy 20–30 minute walk", "rest": "", "note": "", "ref": ""}]}, {"name": "Sat · Engine & race prep", "items": [{"name": "Zone 2 run", "sets": "1", "reps": "35–45 min", "rest": "", "note": "", "ref": "", "byWeek": [{"from": 1, "to": 3, "sets": "1", "reps": "35–45 min", "rest": "", "note": "Easy: you can talk in full sentences. Your Zone 2 heart rate is in the app. This builds the engine that carries you through 8 km of running."}, {"from": 4, "to": 6, "sets": "1", "reps": "45–60 min", "rest": "", "note": "Easy pace, conversation pace. Add a few minutes each week."}, {"from": 7, "to": 8, "skip": true}]}, {"name": "Burpee Broad Jumps + Wall Balls", "sets": "1", "reps": "10 min", "rest": "", "note": "", "ref": "", "byWeek": [{"from": 1, "to": 3, "sets": "1", "reps": "10 min", "rest": "", "note": "After the run: every minute, 5 Burpee Broad Jumps then 10 Wall Balls. Rest the remainder of the minute."}, {"from": 4, "to": 6, "sets": "1", "reps": "12 min", "rest": "", "note": "After the run: every minute, 6 Burpee Broad Jumps then 12 Wall Balls."}, {"from": 7, "to": 8, "skip": true}]}, {"name": "Sim: 1 km Run", "sets": "8", "reps": "1 km", "rest": "", "note": "Full HYROX simulation. Order: run, SkiErg, run, Sled Push, run, Sled Pull, run, Burpee Broad Jumps, run, Row, run, Farmers Carry, run, Sandbag Lunges, run, Wall Balls. Log each 1 km split here and each station below. Go straight to the next piece: the clock doesn't stop.", "ref": "", "log": "time", "byWeek": [{"from": 1, "to": 6, "skip": true}, {"from": 8, "to": 8, "skip": true}]}, {"name": "Sim: SkiErg", "sets": "1", "reps": "1000 m", "rest": "", "note": "", "ref": "", "log": "time", "byWeek": [{"from": 1, "to": 6, "skip": true}, {"from": 8, "to": 8, "skip": true}]}, {"name": "Sim: Sled Push", "sets": "1", "reps": "50 m", "rest": "", "note": "Race weight (sled included): men 335 lb (152 kg), women 225 lb (102 kg). No sled? Push a loaded prowler, or a treadmill with the motor off.", "ref": "", "log": "time", "lb": true, "byWeek": [{"from": 1, "to": 6, "skip": true}, {"from": 8, "to": 8, "skip": true}]}, {"name": "Sim: Sled Pull", "sets": "1", "reps": "50 m", "rest": "", "note": "Race weight (sled included): men 227 lb (103 kg), women 172 lb (78 kg). Hand over hand with a rope, walking backward. No sled? Heavy rope pulls or cable rows.", "ref": "", "log": "time", "lb": true, "byWeek": [{"from": 1, "to": 6, "skip": true}, {"from": 8, "to": 8, "skip": true}]}, {"name": "Sim: Burpee Broad Jumps", "sets": "1", "reps": "80 m", "rest": "", "note": "", "ref": "", "log": "time", "byWeek": [{"from": 1, "to": 6, "skip": true}, {"from": 8, "to": 8, "skip": true}]}, {"name": "Sim: Row", "sets": "1", "reps": "1000 m", "rest": "", "note": "", "ref": "", "log": "time", "byWeek": [{"from": 1, "to": 6, "skip": true}, {"from": 8, "to": 8, "skip": true}]}, {"name": "Sim: Farmers Carry", "sets": "1", "reps": "200 m", "rest": "", "note": "Race weight: men 2 × 53 lb (24 kg), women 2 × 35 lb (16 kg) kettlebells or dumbbells.", "ref": "", "log": "time", "lb": true, "byWeek": [{"from": 1, "to": 6, "skip": true}, {"from": 8, "to": 8, "skip": true}]}, {"name": "Sim: Sandbag Lunges", "sets": "1", "reps": "100 m", "rest": "", "note": "Race weight: men 44 lb (20 kg), women 22 lb (10 kg) sandbag on your shoulders. Back knee touches the floor every rep.", "ref": "", "log": "time", "lb": true, "byWeek": [{"from": 1, "to": 6, "skip": true}, {"from": 8, "to": 8, "skip": true}]}, {"name": "Sim: Wall Balls", "sets": "1", "reps": "100 reps", "rest": "", "note": "Race standard: men 14 lb ball to a 10 ft target, women 9 lb ball to 9 ft. Full squat below parallel every rep.", "ref": "", "log": "time", "lb": true, "byWeek": [{"from": 1, "to": 6, "skip": true}, {"from": 8, "to": 8, "skip": true}]}, {"name": "Race day", "sets": "1", "reps": "finish time", "rest": "", "note": "Race HYROX! Log your official finish time. No race booked? Do the full simulation again and beat your week 7 time.", "ref": "", "log": "time", "byWeek": [{"from": 1, "to": 7, "skip": true}]}]}, {"name": "Sun · Rest", "items": [{"name": "Rest", "sets": "", "reps": "Full rest. Eat well and sleep 8 hours.", "rest": "", "note": "", "ref": ""}]}], "program": {"name": "8-Week HYROX Prep", "weeks": 8, "daysPerWeek": 4, "phases": [{"from": 1, "to": 3, "name": "Base", "note": "Build the engine and learn the stations. Runs at a steady, repeatable pace; sleds and carries at moderate weight. Strength: 2 good reps left in the tank.", "main": {"sets": 4, "reps": "6–8", "rir": "2", "rest": "2–3 min"}, "acc": {"sets": 3, "reps": "10–12", "rir": "2", "rest": "90 sec"}}, {"from": 4, "to": 6, "name": "Build", "note": "Race weights on the sleds and carries, 1 km repeats at race pace, longer compromised-running rounds. Log every split and try to beat last week.", "main": {"sets": 4, "reps": "5–6", "rir": "1–2", "rest": "3 min"}, "acc": {"sets": 3, "reps": "8–10", "rir": "1–2", "rest": "90 sec"}}, {"from": 7, "to": 7, "name": "Race simulation", "note": "Saturday is a full HYROX simulation: 8 × 1 km run with all 8 stations. Log every split; the app adds up your total time. Lighter strength work this week.", "main": {"sets": 3, "reps": "5", "rir": "2", "rest": "3 min"}, "acc": {"sets": 2, "reps": "10", "rir": "2", "rest": "90 sec"}}, {"from": 8, "to": 8, "name": "Taper & race", "note": "Race week: less work, same sharpness. Short, quick sessions, lots of sleep and carbs the 2 days before. Saturday: race, or re-run the simulation and beat week 7.", "main": {"sets": 2, "reps": "5", "rir": "3", "rest": "2 min"}, "acc": {"sets": 2, "reps": "8", "rir": "3", "rest": "90 sec"}, "deload": true}]}};
+  const templates = [{ id: "t1", name: "8-Week Strength Builder (4-day Upper/Lower)", title: "8-Week Strength Builder", notes: SB.notes, days: JSON.parse(JSON.stringify(SB.days)), program: JSON.parse(JSON.stringify(SB.program)) }, { id: "t2", ...HX }];
   const photos = {};
   const wait = () => new Promise(r => setTimeout(r, 120));
   return {
@@ -1110,7 +1111,7 @@ function sendReminders() {
   if (!IN_APP || S.isTrainer || !S.plan) return;
   const r = remSettings(), [hh, mm] = String(r.time || "07:00").split(":").map(Number), days = [];
   S.plan.days.forEach(d => { if (isRestDay(d)) return; const m = String(d.name || "").trim().toLowerCase().match(/^(sun|mon|tue|wed|thu|fri|sat)/); if (!m) return;
-    days.push({ weekday: WEEKDAYS.indexOf(m[1]) + 1, title: `Today: ${shortDay(d.name)} 💪`, body: `${(d.items || []).filter(x => !/zone 2/i.test(x.name)).length} exercises · 45 min of lifting + 30 min Zone 2. Let's go!` }); });
+    days.push({ weekday: WEEKDAYS.indexOf(m[1]) + 1, title: `Today: ${shortDay(d.name)} 💪`, body: `${(d.items || []).filter(x => !/zone 2/i.test(x.name)).length} exercises today. Let's go!` }); });
   toApp({ type: "reminders", enabled: !!r.on && days.length > 0, hour: hh || 0, minute: mm || 0, days });
 }
 function openReminders() {
@@ -1157,7 +1158,7 @@ function todayWorkoutCard(c) {
   else {
     let i = idx;
     if (i == null) { const last = S.workouts[0], li = last ? p.days.findIndex(d => d.name === last.dayName) : -1; i = p.days.findIndex((d, k) => k > li && !isRestDay(d)); if (i < 0) i = p.days.findIndex(d => !isRestDay(d)); }
-    const d = p.days[i], n = (d.items || []).length;
+    const d = p.days[i], n = dayItems(d, p.program, progWeek(p.program)).length;
     body = `<div class="tw-main"><span class="tw-ic">🏋️</span><div><b>${idx == null ? "Next up" : "Today"}: ${esc(shortDay(d.name))}</b><span class="muted small">${n} exercises${S.plan.program && progWeek(S.plan.program) >= 1 && progWeek(S.plan.program) <= S.plan.program.weeks ? ` · Week ${progWeek(S.plan.program)} of ${S.plan.program.weeks}` : ""}</span></div>
       ${S.workoutsMissing ? "" : `<button type="button" class="btn primary" data-start="${i}">${S.isTrainer ? "Log it" : "Start"}</button>`}</div>`;
   }
@@ -1388,7 +1389,7 @@ const bestE1 = e => Math.max(0, ...(e.sets || []).map(st => e1rm(st.lb, st.reps)
 function liftHistory(workouts) {
   const by = {};
   [...workouts].sort((a, b) => a.date.localeCompare(b.date) || String(a.createdAt).localeCompare(String(b.createdAt))).forEach(w => w.entries.forEach(e => {
-    if (e.timed) return; const v = bestE1(e); if (!v) return;
+    if (e.timed || e.clock) return; const v = bestE1(e); if (!v) return;
     const st = e.sets.reduce((a, s) => (e1rm(s.lb, s.reps) || 0) > (e1rm(a.lb, a.reps) || 0) ? s : a, e.sets[0]);
     (by[e.name] ||= []).push({ date: w.date, e1: v, top: fmtSet(st) });
   }));
@@ -1690,11 +1691,18 @@ function progWeek(pr) { if (!pr || !pr.start || !pr.weeks) return null; const d 
 const progPhase = (pr, wk) => (pr && pr.phases || []).find(ph => wk >= ph.from && wk <= ph.to) || null;
 const progKey = pr => pr && pr.start ? `${pr.name}|${pr.start}|${pr.weeks}|${pr.daysPerWeek || 0}` : "";
 function itemForWeek(x, pr, wk) {
+  // Items can change week to week (HYROX runs and stations): byWeek [{from, to, sets, reps, rest, note, skip}].
+  if (Array.isArray(x.byWeek) && x.byWeek.length) {
+    const w = pr ? Math.min(Math.max(wk || 1, 1), pr.weeks) : 1, o = x.byWeek.find(o => w >= o.from && w <= o.to);
+    if (o) { const { from, to, ...rest } = o; x = { ...x, ...rest }; }
+  }
   if (!pr || !x.kind || !wk || wk > pr.weeks) return x;
   const ph = progPhase(pr, wk), sp = ph && (x.kind === "main" ? ph.main : ph.acc);
   if (!sp) return x;
   return { ...x, sets: String(sp.sets), reps: String(sp.reps), rir: sp.rir != null ? String(sp.rir) : "", rest: sp.rest || x.rest, deload: !!ph.deload, peak: !!ph.peak };
 }
+/* The exercises a day has this week (some only appear in certain weeks, like a race simulation). */
+const dayItems = (d, pr, wk) => (d.items || []).map(x => itemForWeek(x, pr, wk)).filter(x => !x.skip);
 const rirTxt = x => x.rir ? ` · ${x.rir} in the tank` : "";
 function progBar(p) {
   const pr = p.program; if (!pr) return "";
@@ -1712,7 +1720,7 @@ function planDays(p) {
   const wk = progWeek(p.program), where = getWhere();
   let n = 0;
   return `<div class="days">${p.days.map((d, i) => isRestDay(d) ? `<div class="day rest"><div class="day-h"><span class="dnum">Rest</span><h3>${esc(d.name || "Rest day")}</h3></div>${(d.items || []).map(x => `<p class="small muted" style="margin:4px 0 0">${esc([x.reps, x.note].filter(Boolean).join(". "))}</p>`).join("")}</div>` : `<div class="day"><div class="day-h"><span class="dnum">Day ${++n}</span><h3>${esc(d.name || "Workout")}</h3>${canLog ? `<button type="button" class="btn primary sm startw" data-start="${i}">${S.isTrainer ? "Log workout" : "Start workout"}</button>` : ""}${lastDone(d.name)}</div>
-    <ol class="plist">${(d.items || []).map(x0 => { const x = placeItem(itemForWeek(x0, p.program, wk), where), u = refUrl(x.ref);
+    <ol class="plist">${dayItems(d, p.program, wk).map(x0 => { const x = placeItem(x0, where), u = refUrl(x.ref);
       const sr = [x.sets ? `${esc(x.sets)} × ${esc(x.reps || "")}` : esc(x.reps || ""), x.rir ? `${esc(x.rir)} in the tank` : "", x.rest ? `rest ${esc(x.rest)}` : ""].filter(Boolean).join(" · ");
       const pics = exPics(x.name, x.ref);
       return `<li${pics ? ` class="haspic"` : ""}>${pics}<div class="ptxt"><div class="pname">${esc(x.name)}${x.kind === "main" ? ` <span class="mtag">Main lift</span>` : ""}</div>${x.gymName ? `<div class="pnote">Home swap for ${esc(x.gymName)}</div>` : ""}${sr ? `<div class="psr">${sr}</div>` : ""}${x.note ? `<div class="pnote">${esc(x.note)}</div>` : ""}${u ? `<a class="plink" href="${u}" target="_blank" rel="noopener">Form tips →</a>` : ""}</div></li>`; }).join("")}</ol></div>`).join("")}</div>`;
@@ -1754,7 +1762,7 @@ $("#rClear").onclick = () => saveReply("");
 /* Plan builder (trainer). */
 const LIB = window.WORKOUT_LIBRARY || [];
 let draft = null, planClient = null;
-const cleanDays = () => draft.days.map(d => ({ name: String(d.name || "").trim(), items: (d.items || []).map(x => ({ name: String(x.name || "").trim(), sets: String(x.sets || "").trim(), reps: String(x.reps || "").trim(), rest: String(x.rest || "").trim(), note: String(x.note || "").trim(), ref: x.ref || "", ...(x.kind ? { kind: x.kind } : {}) })).filter(x => x.name) })).filter(d => d.items.length);
+const cleanDays = () => draft.days.map(d => ({ name: String(d.name || "").trim(), items: (d.items || []).map(x => ({ name: String(x.name || "").trim(), sets: String(x.sets || "").trim(), reps: String(x.reps || "").trim(), rest: String(x.rest || "").trim(), note: String(x.note || "").trim(), ref: x.ref || "", ...(x.kind ? { kind: x.kind } : {}), ...(x.log ? { log: x.log } : {}), ...(x.lb ? { lb: true } : {}), ...(x.byWeek ? { byWeek: x.byWeek } : {}) })).filter(x => x.name) })).filter(d => d.items.length);
 const blankItem = () => ({ name: "", sets: "3", reps: "10", rest: "60 sec", note: "", ref: "" });
 function openPlan(c) {
   planClient = c;
@@ -1863,13 +1871,18 @@ async function loadWorkouts() {
   try { S.workouts = await api.listWorkouts(S.sel); S.workoutsMissing = false; }
   catch (err) { if (isMissing(err)) S.workoutsMissing = true; else console.error(err); }
 }
-const isTimed = x => /min|sec|yard|yd\b/i.test(String(x.reps || ""));
+const isClock = x => x.log === "time";
+const isTimed = x => !isClock(x) && /min|sec|yard|yd\b/i.test(String(x.reps || ""));
+/* 75 → "1:15", 3725 → "1:02:05" */
+const fmtTime = t => { t = Math.max(0, Math.round(t)); const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s2 = String(t % 60).padStart(2, "0"); return h ? `${h}:${String(m).padStart(2, "0")}:${s2}` : `${m}:${s2}`; };
 const topRep = x => { const n = String(x.reps || "").match(/\d+/g); return n ? Math.max(...n.map(Number)) : null; };
 const nSets = x => Math.min(10, Math.max(1, parseInt(x.sets, 10) || 3));
-const fmtSet = st => `${st.lb != null ? f1(st.lb).replace(/\.0$/, "") : "BW"} × ${st.reps ?? "–"}`;
+const fmtSet = st => st.sec != null ? `${fmtTime(st.sec)}${st.lb ? ` @ ${f1(st.lb).replace(/\.0$/, "")} lb` : ""}` : `${st.lb != null ? f1(st.lb).replace(/\.0$/, "") : "BW"} × ${st.reps ?? "–"}`;
+const logged = st => st.reps != null || st.sec != null;
+const clockTotal = entries => entries.filter(e => e.clock).reduce((a, e) => a + e.sets.reduce((b, st) => b + (st.sec || 0), 0), 0);
 /* Most recent logged sets for an exercise, newest workout first. */
 function lastFor(name) {
-  for (const w of S.workouts) { const e = w.entries.find(x => x.name === name && !x.timed && x.sets && x.sets.some(st => st.reps != null)); if (e) return { w, e }; }
+  for (const w of S.workouts) { const e = w.entries.find(x => x.name === name && !x.timed && x.sets && x.sets.some(logged)); if (e) return { w, e }; }
   return null;
 }
 function lastDone(dayName) {
@@ -1879,6 +1892,7 @@ function lastDone(dayName) {
 /* "Add weight" nudge: every target set reached the top of the rep range last time. */
 function progressHint(x, prev) {
   if (isTimed(x)) return "";
+  if (isClock(x)) { if (!prev) return ""; const b = Math.min(...prev.e.sets.filter(st => st.sec).map(st => st.sec)); return isFinite(b) && prev.e.target === targetOf(x) ? `<div class="hint up">Best last time: ${fmtTime(b)}. Try to beat it.</div>` : ""; }
   if (x.deload) return `<div class="hint">Deload week: use about 85–90% of last week's weight and leave plenty in the tank. This is when you recover and get stronger.</div>`;
   if (x.peak && x.kind === "main") return `<div class="hint up">PR week: warm up well, then go for your best set. Stop if form breaks down.</div>`;
   if (!prev) return "";
@@ -1888,13 +1902,19 @@ function progressHint(x, prev) {
 }
 
 let wDraft = null, wClient = null;
+const targetOf = x => [x.sets ? `${x.sets} ×` : "", x.reps || ""].join(" ").trim() + (x.rir ? ` · ${x.rir} in the tank` : "");
+/* One exercise in the logger. Time-logged items (runs, HYROX stations) get min/sec boxes instead of weight × reps. */
+function mkEntry(x) {
+  const clock = isClock(x), timed = isTimed(x);
+  return { name: x.name, ref: x.ref || "", target: targetOf(x), timed, clock, done: false, plan: x,
+    sets: timed ? [] : Array.from({ length: nSets(x) }, () => clock ? { lb: "", min: "", sec: "" } : { lb: "", reps: "" }) };
+}
 function openWorkout(c, dayIdx) {
   const day = S.plan.days[dayIdx]; wClient = c;
   const pr = S.plan.program, wk = progWeek(pr), inProg = pr && wk >= 1 && wk <= pr.weeks;
-  const base = day.items.map(x0 => itemForWeek(x0, pr, wk)), where = getWhere();
+  const base = dayItems(day, pr, wk), where = getWhere();
   wDraft = { clientId: c.id, date: todayISO(), dayName: day.name || `Day ${dayIdx + 1}`, note: "", program: inProg ? progKey(pr) : "", week: inProg ? wk : null, base, where,
-    entries: base.map(x0 => placeItem(x0, where)).map(x => ({ name: x.name, ref: x.ref || "", target: [x.sets ? `${x.sets} ×` : "", x.reps || ""].join(" ").trim() + (x.rir ? ` · ${x.rir} in the tank` : ""), timed: isTimed(x), done: false,
-      sets: isTimed(x) ? [] : Array.from({ length: nSets(x) }, () => ({ lb: "", reps: "" })), plan: x })) };
+    entries: base.map(x0 => mkEntry(placeItem(x0, where))) };
   $("#wTitle").textContent = (wDraft.week ? `Week ${wDraft.week} · ` : "") + wDraft.dayName;
   $("#wSub").textContent = S.isTrainer ? `Logging for ${firstName(c.name)}` : "Log each set as you go. Leave a set blank if you skipped it.";
   $("#w-date").value = wDraft.date; $("#w-date").max = todayISO(); $("#w-note").value = ""; $("#wErr").textContent = "";
@@ -1904,9 +1924,8 @@ function openWorkout(c, dayIdx) {
 function switchWhere(where) {
   if (wDraft.where === where) return;
   wDraft.where = where; setWhere(where);
-  wDraft.entries = wDraft.entries.map((e, i) => { const x = placeItem(wDraft.base[i], where);
-    return { ...e, name: x.name, ref: x.ref || "", target: [x.sets ? `${x.sets} ×` : "", x.reps || ""].join(" ").trim() + (x.rir ? ` · ${x.rir} in the tank` : ""), timed: isTimed(x), plan: x,
-      sets: isTimed(x) ? [] : (e.sets.length ? e.sets : Array.from({ length: nSets(x) }, () => ({ lb: "", reps: "" }))) }; });
+  wDraft.entries = wDraft.entries.map((e, i) => { const n = mkEntry(placeItem(wDraft.base[i], where));
+    return { ...n, done: e.done, sets: n.timed ? [] : (e.sets.length && !!e.clock === !!n.clock ? e.sets : n.sets) }; });
   drawWorkout(); render();
 }
 function drawWorkout() {
@@ -1914,19 +1933,33 @@ function drawWorkout() {
   $$("#wWhere [data-where]").forEach(b => b.onclick = () => switchWhere(b.dataset.where));
   $("#wList").innerHTML = wDraft.entries.map((e, ei) => {
     const prev = lastFor(e.name), x = e.plan;
-    const last = prev ? `<div class="wlast">Last time (${fmtD(prev.w.date)}): <b>${prev.e.sets.filter(st => st.reps != null).map(fmtSet).join(", ")}</b></div>` : "";
-    const head = `<div class="wex-h"><div class="wgrow"><div class="wname">${esc(e.name)}</div><div class="wtarget">Target ${esc(e.target)}${x.rest ? ` · rest ${esc(x.rest)}` : ""}</div></div><div class="wex-a">${refUrl(e.ref) ? `<a class="plink" href="${refUrl(e.ref)}" target="_blank" rel="noopener">Form →</a>` : ""}${e.timed ? "" : `<button type="button" class="restbtn" data-rest="${ei}" aria-label="Start ${fmtClock(restSecs(x.rest))} rest timer">Rest ${fmtClock(restSecs(x.rest))}</button>`}</div></div>${exPics(e.name, e.ref)}`;
+    const last = prev ? `<div class="wlast">Last time (${fmtD(prev.w.date)}): <b>${prev.e.sets.filter(logged).map(fmtSet).join(", ")}</b>${prev.e.target && prev.e.target !== e.target ? ` <span class="muted">(${esc(prev.e.target)})</span>` : ""}</div>` : "";
+    const head = `<div class="wex-h"><div class="wgrow"><div class="wname">${esc(e.name)}</div><div class="wtarget">Target ${esc(e.target)}${x.rest ? ` · rest ${esc(x.rest)}` : ""}</div></div><div class="wex-a">${refUrl(e.ref) ? `<a class="plink" href="${refUrl(e.ref)}" target="_blank" rel="noopener">Form →</a>` : ""}${e.timed || (e.clock && !String(x.rest || "").trim()) ? "" : `<button type="button" class="restbtn" data-rest="${ei}" aria-label="Start ${fmtClock(restSecs(x.rest))} rest timer">Rest ${fmtClock(restSecs(x.rest))}</button>`}</div></div>${exPics(e.name, e.ref)}`;
     if (e.timed) return `<div class="wex">${head}${x.note ? `<div class="pnote">${esc(x.note)}</div>` : ""}<label class="wdone"><input type="checkbox" data-done="${ei}"${e.done ? " checked" : ""}> Done</label></div>`;
     const ph = prev ? prev.e.sets.filter(st => st.lb != null).map(st => st.lb) : [];
+    if (e.clock) {
+      const lbBox = si => `<label class="wf"><input type="number" inputmode="decimal" step="5" min="0" max="2000" data-e="${ei}" data-s="${si}" data-k="lb" value="${esc(e.sets[si].lb)}" placeholder="${ph[si] ?? ph[ph.length - 1] ?? ""}" aria-label="${esc(e.name)} weight"><span>lb</span></label>`;
+      const rows = e.sets.map((st, si) => `<div class="wset${x.lb ? " w3" : ""}"><span class="snum">${e.sets.length > 1 ? `#${si + 1}` : "Time"}</span>
+        <label class="wf"><input type="number" inputmode="numeric" step="1" min="0" max="600" data-e="${ei}" data-s="${si}" data-k="min" value="${esc(st.min)}" placeholder="0" aria-label="${esc(e.name)} ${si + 1} minutes"><span>min</span></label>
+        <label class="wf"><input type="number" inputmode="numeric" step="1" min="0" max="59" data-e="${ei}" data-s="${si}" data-k="sec" value="${esc(st.sec)}" placeholder="00" aria-label="${esc(e.name)} ${si + 1} seconds"><span>sec</span></label>${x.lb ? lbBox(si) : ""}</div>`).join("");
+      return `<div class="wex">${head}${x.note ? `<div class="pnote">${esc(x.note)}</div>` : ""}${last}${progressHint(x, prev)}${rows}<button type="button" class="linkbtn addset" data-addset="${ei}">+ Add one</button></div>`;
+    }
     const rows = e.sets.map((st, si) => `<div class="wset"><span class="snum">Set ${si + 1}</span>
       <label class="wf"><input type="number" inputmode="decimal" step="2.5" min="0" max="2000" data-e="${ei}" data-s="${si}" enterkeyhint="next" data-k="lb" value="${esc(st.lb)}" placeholder="${ph[si] ?? ph[ph.length - 1] ?? ""}" aria-label="${esc(e.name)} set ${si + 1} weight"><span>lb</span></label>
       <label class="wf"><input type="number" inputmode="numeric" step="1" min="0" max="200" data-e="${ei}" data-s="${si}" data-k="reps" value="${esc(st.reps)}" placeholder="${topRep(x) ?? ""}" aria-label="${esc(e.name)} set ${si + 1} reps"><span>reps</span></label></div>`).join("");
     return `<div class="wex">${head}${x.note ? `<div class="pnote">${esc(x.note)}</div>` : ""}${last}${progressHint(x, prev)}${rows}<button type="button" class="linkbtn addset" data-addset="${ei}">+ Add a set</button></div>`;
-  }).join("");
+  }).join("") + `<div class="wtotal" id="wTotal"${wDraft.entries.filter(e => e.clock).length > 1 ? "" : " hidden"}></div>`;
+  drawTotal();
+}
+/* Running total of every logged time (a HYROX simulation adds up to your race time). */
+function drawTotal() {
+  const el = $("#wTotal"); if (!el || el.hidden) return;
+  const t = wDraft.entries.filter(e => e.clock).reduce((a, e) => a + e.sets.reduce((b, st) => b + (num(st.min) || 0) * 60 + (num(st.sec) || 0), 0), 0);
+  el.innerHTML = `⏱ Total time <b>${t ? fmtTime(t) : "–"}</b>`;
 }
 $("#wList").addEventListener("input", ev => {
   const t = ev.target;
-  if (t.dataset.k) wDraft.entries[+t.dataset.e].sets[+t.dataset.s][t.dataset.k] = t.value;
+  if (t.dataset.k) { wDraft.entries[+t.dataset.e].sets[+t.dataset.s][t.dataset.k] = t.value; if (t.dataset.k === "min" || t.dataset.k === "sec") drawTotal(); }
   if (t.dataset.done != null) wDraft.entries[+t.dataset.done].done = t.checked;
 });
 /* A weight carries down to the later sets of the same exercise (until you type a different one there). */
@@ -1941,8 +1974,9 @@ $("#wList").addEventListener("change", ev => {
   }
 });
 $("#wList").addEventListener("change", ev => {
-  const t = ev.target; if (t.dataset.k !== "reps" || t.value === "") return;
+  const t = ev.target; if ((t.dataset.k !== "reps" && t.dataset.k !== "sec") || t.value === "") return;
   const ei = +t.dataset.e, si = +t.dataset.s, e = wDraft.entries[ei];
+  if (e.clock && !String(e.plan.rest || "").trim()) return;   // race-style work: no rest timer between pieces
   let next;
   if (si + 1 < e.sets.length) next = `Next: ${e.name}, set ${si + 2}`;
   else { const n = wDraft.entries.slice(ei + 1).find(x => !x.timed); next = n ? `Next: ${n.name}` : "Last set done. Finish strong!"; }
@@ -1966,7 +2000,7 @@ $("#wList").addEventListener("keydown", ev => {
   if (next) { next.focus({ preventScroll: true }); next.scrollIntoView({ block: "center", behavior: "smooth" }); } else ev.target.blur();
 });
 $("#wList").addEventListener("click", ev => { const r = ev.target.closest("[data-rest]"); if (r) { const e = wDraft.entries[+r.dataset.rest]; startRest(restSecs(e.plan.rest), `Rest: ${e.name}`); } });
-$("#wList").addEventListener("click", ev => { const b = ev.target.closest("[data-addset]"); if (!b) return; const e = wDraft.entries[+b.dataset.addset]; if (e.sets.length < 12) { const lastLb = e.sets.length ? e.sets[e.sets.length - 1].lb : ""; e.sets.push({ lb: lastLb, reps: "" }); if (lastLb !== "") { e.autoLb = e.autoLb || {}; e.autoLb[e.sets.length - 1] = true; } drawWorkout(); } });
+$("#wList").addEventListener("click", ev => { const b = ev.target.closest("[data-addset]"); if (!b) return; const e = wDraft.entries[+b.dataset.addset]; if (e.sets.length < 12) { const lastLb = e.sets.length ? e.sets[e.sets.length - 1].lb : ""; e.sets.push(e.clock ? { lb: lastLb, min: "", sec: "" } : { lb: lastLb, reps: "" }); if (lastLb !== "") { e.autoLb = e.autoLb || {}; e.autoLb[e.sets.length - 1] = true; } drawWorkout(); } });
 $("#wCancel").onclick = () => $("#dlgWorkout").close();
 $("#dlgWorkout").addEventListener("close", () => { stopRest(); releaseWake(); });
 $("#fWorkout").onsubmit = async ev => {
@@ -1975,10 +2009,15 @@ $("#fWorkout").onsubmit = async ev => {
   if (date > todayISO()) { err.textContent = "The date can't be in the future."; return; }
   const entries = wDraft.entries.map(e => {
     if (e.timed) return e.done ? { name: e.name, ref: e.ref, target: e.target, timed: true, done: true, sets: [] } : null;
+    if (e.clock) {
+      const sets = e.sets.map(st => ({ lb: num(st.lb), sec: Math.round((num(st.min) || 0) * 60 + (num(st.sec) || 0)) })).filter(st => st.sec > 0).map(st => st.lb != null ? st : { sec: st.sec });
+      return sets.length ? { name: e.name, ref: e.ref, target: e.target, timed: false, clock: true, done: true, sets } : null;
+    }
     const sets = e.sets.map(st => ({ lb: num(st.lb), reps: num(st.reps) })).filter(st => st.reps != null || st.lb != null).map(st => ({ lb: st.lb, reps: st.reps != null ? Math.round(st.reps) : null }));
     return sets.length ? { name: e.name, ref: e.ref, target: e.target, timed: false, done: true, sets } : null;
   }).filter(Boolean);
   if (!entries.length) { err.textContent = "Log at least one set (or tick Done) before finishing."; return; }
+  if (entries.some(e => e.clock && e.sets.some(st => st.sec > 36000))) { err.textContent = "Check the times: each one should be under 10 hours."; return; }
   if (entries.some(e => e.sets.some(st => (st.lb != null && (st.lb < 0 || st.lb > 2000)) || (st.reps != null && (st.reps < 0 || st.reps > 200))))) { err.textContent = "Check the numbers: weight 0–2000 lb, reps 0–200."; return; }
   const btn = $("#wSave"); btn.disabled = true; btn.textContent = "Saving…"; err.textContent = "";
   try {
@@ -1987,7 +2026,13 @@ $("#fWorkout").onsubmit = async ev => {
     $("#dlgWorkout").close(); await loadWorkouts();
     const sets = entries.reduce((a, e) => a + e.sets.length, 0);
     const prevBest = liftHistory(before), prs = entries.map(e => { const v = bestE1(e), h = prevBest[e.name]; return v && h && h.length && v > Math.max(...h.map(p => p.e1)) + 0.01 ? { name: e.name, v } : null; }).filter(Boolean);
-    if (prs.length) toast(`🏆 New PR${prs.length > 1 ? "s" : ""}! ${prs.map(p => `${p.name}: ${Math.round(p.v)} lb est. max`).join(" · ")}`);
+    // Faster than ever on the same distance (runs, stations, a full simulation).
+    const fast = entries.filter(e => e.clock).map(e => { const best = Math.min(...e.sets.map(st => st.sec)); let was = Infinity;
+      before.forEach(w => w.entries.forEach(p => { if (p.clock && p.name === e.name && p.target === e.target) was = Math.min(was, ...p.sets.map(st => st.sec)); }));
+      return isFinite(was) && best < was ? `${e.name}: ${fmtTime(best)} (was ${fmtTime(was)})` : null; }).filter(Boolean);
+    const total = entries.filter(e => e.clock).length > 1 ? clockTotal(entries) : 0;
+    if (prs.length || fast.length) toast([prs.length ? `🏆 New PR${prs.length > 1 ? "s" : ""}! ${prs.map(p => `${p.name}: ${Math.round(p.v)} lb est. max`).join(" · ")}` : "", fast.length ? `⚡ Faster! ${fast.join(" · ")}` : ""].filter(Boolean).join(" "));
+    else if (total) toast(`Workout saved. Total time ${fmtTime(total)}. Nice work!`);
     else toast(S.isTrainer ? `Workout logged for ${firstName(wClient.name)}` : `Workout saved: ${entries.length} exercises, ${sets} sets. Nice work!`);
     render();
   } catch (e) { console.error(e); err.textContent = isMissing(e) ? "Workout logging needs the latest database update in tracker/SETUP.md." : "Couldn't save. Check your connection and try again."; }
@@ -2075,7 +2120,7 @@ function workoutsCard(c) {
   const gains = Object.entries(by).filter(([, a]) => a.length >= 2).map(([n, a]) => ({ n, from: a[0].best, to: a[a.length - 1].best, d: a[a.length - 1].best - a[0].best })).filter(g => g.d > 0).sort((a, b) => b.d - a.d).slice(0, 6);
   const rows = ws.slice(0, 8).map(w => {
     const sets = w.entries.reduce((a, e) => a + e.sets.length, 0);
-    return `<details class="wlog"><summary><span class="wd">${fmtD(w.date, true)}</span><span class="wn">${esc(w.dayName || "Workout")}</span><span class="wc">${w.entries.length} exercises · ${sets} sets</span></summary>
+    return `<details class="wlog"><summary><span class="wd">${fmtD(w.date, true)}</span><span class="wn">${esc(w.dayName || "Workout")}</span><span class="wc">${w.entries.length} exercises · ${w.entries.filter(e => e.clock).length > 1 ? `⏱ ${fmtTime(clockTotal(w.entries))}` : `${sets} sets`}</span></summary>
       <ul>${w.entries.map(e => `<li><b>${esc(e.name)}</b> ${e.timed ? "Done" : e.sets.map(fmtSet).join(", ")}</li>`).join("")}</ul>${w.note ? `<p class="small muted">${esc(w.note)}</p>` : ""}
       <button type="button" class="btn ghost sm danger" data-delw="${esc(w.id)}">Delete</button></details>`;
   }).join("");

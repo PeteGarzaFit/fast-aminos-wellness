@@ -117,10 +117,10 @@ const toClientRow = c => ({ email: c.email, name: c.name, sex: c.sex, dob: c.dob
 const FEEL_KEYS = ["energy", "hunger", "sleep_q", "sleep_hours", "steps", "side_effects"];
 const SIDE_EFFECTS = ["Nausea", "Vomiting", "Constipation", "Diarrhea", "Heartburn", "Bloating", "Tired", "Headache", "Dizzy", "Low appetite"];
 const fromCheckinRow = r => ({ id: r.id, clientId: r.client_id, date: r.date, weight: num(r.weight_lb), waist: num(r.waist_in), neck: num(r.neck_in), hip: num(r.hip_in), omron: num(r.omron_bf), photoFront: r.photo_front, photoSide: r.photo_side, note: r.note, energy: num(r.energy), hunger: num(r.hunger), sleepQ: num(r.sleep_q), sleepH: num(r.sleep_hours), steps: num(r.steps), sideEffects: Array.isArray(r.side_effects) ? r.side_effects : [], coachNote: r.coach_note || null, coachNoteAt: r.coach_note_at || null, enteredBy: r.entered_by, createdAt: r.created_at });
-const fromWorkoutRow = r => ({ id: r.id, clientId: r.client_id, date: r.date, dayName: r.day_name || "", entries: Array.isArray(r.entries) ? r.entries : [], note: r.note || "", enteredBy: r.entered_by, createdAt: r.created_at });
+const fromWorkoutRow = r => ({ id: r.id, clientId: r.client_id, date: r.date, dayName: r.day_name || "", entries: Array.isArray(r.entries) ? r.entries : [], note: r.note || "", program: r.program || "", enteredBy: r.entered_by, createdAt: r.created_at });
 const fromHealthRow = r => ({ date: r.date, steps: num(r.steps), sleepH: num(r.sleep_hours), weight: num(r.weight_lb), kcal: num(r.active_kcal), exMin: num(r.exercise_min), rhr: num(r.resting_hr), kcalIn: num(r.kcal_in), protein: num(r.protein_g), carbs: num(r.carbs_g), fat: num(r.fat_g), hrv: num(r.hrv_ms), updatedAt: r.updated_at });
-const fromTplRow = r => ({ id: r.id, name: r.name, title: r.title || "", notes: r.notes || "", days: Array.isArray(r.days) ? r.days : [] });
-const fromPlanRow = r => r ? ({ title: r.title || "", notes: r.notes || "", days: Array.isArray(r.days) ? r.days : [], updatedAt: r.updated_at }) : null;
+const fromTplRow = r => ({ id: r.id, name: r.name, title: r.title || "", notes: r.notes || "", days: Array.isArray(r.days) ? r.days : [], program: r.program && typeof r.program === "object" ? r.program : null });
+const fromPlanRow = r => r ? ({ title: r.title || "", notes: r.notes || "", days: Array.isArray(r.days) ? r.days : [], program: r.program && typeof r.program === "object" ? r.program : null, updatedAt: r.updated_at }) : null;
 /* Supabase reports a missing table/column when the October 2026 database update hasn't been run yet. */
 const isMissing = e => !!e && (e.code === "42P01" || e.code === "42703" || e.code === "PGRST205" || e.code === "PGRST204" || /does not exist|schema cache/i.test(e.message || ""));
 const toCheckinRow = e => ({ client_id: e.clientId, date: e.date, weight_lb: e.weight, waist_in: e.waist, neck_in: e.neck, hip_in: e.hip, omron_bf: e.omron, photo_front: e.photoFront, photo_side: e.photoSide, note: e.note,
@@ -171,7 +171,12 @@ function supaApi(sb) {
       const m = {}; (d || []).forEach(x => { if (x.signedUrl) m[x.path] = x.signedUrl; }); return m;
     },
     async getPlan(clientId) { return fromPlanRow(chk(await sb.from("client_plans").select("*").eq("client_id", clientId).maybeSingle())); },
-    async savePlan(clientId, p) { return fromPlanRow(chk(await sb.from("client_plans").upsert({ client_id: clientId, title: p.title || null, notes: p.notes || null, days: p.days }, { onConflict: "client_id" }).select().single())); },
+    async savePlan(clientId, p) {
+      const row = { client_id: clientId, title: p.title || null, notes: p.notes || null, days: p.days, program: p.program || null };
+      let res = await sb.from("client_plans").upsert(row, { onConflict: "client_id" }).select().single();
+      if (res.error && isMissing(res.error)) { delete row.program; res = await sb.from("client_plans").upsert(row, { onConflict: "client_id" }).select().single(); if (!res.error && p.program) toast("Saved without the program weeks. Run the latest database update (supabase/schema.sql)."); }
+      return fromPlanRow(chk(res));
+    },
     async deletePlan(clientId) { chk(await sb.from("client_plans").delete().eq("client_id", clientId)); },
     async saveFeedback(checkinId, note) { return fromCheckinRow(chk(await sb.from("checkins").update({ coach_note: note || null }).eq("id", checkinId).select().single())); },
     async listTemplates() { return chk(await sb.from("plan_templates").select("*").order("name")).map(fromTplRow); },
@@ -202,14 +207,22 @@ function supaApi(sb) {
         safe(sb.from("client_plans").select("client_id,days"))]);
       return { checkins, workouts, water, health, plans };
     },
-    async listWater(clientId) { return chk(await sb.from("water_daily").select("date,oz").eq("client_id", clientId).order("date", { ascending: false }).limit(60)).map(r => ({ date: r.date, oz: num(r.oz) || 0 })); },
+    async listWater(clientId) { return chk(await sb.from("water_daily").select("date,oz").eq("client_id", clientId).order("date", { ascending: false }).limit(400)).map(r => ({ date: r.date, oz: num(r.oz) || 0 })); },
     async setWater(clientId, date, oz) { chk(await sb.from("water_daily").upsert({ client_id: clientId, date, oz }, { onConflict: "client_id,date" })); },
     async listWorkouts(clientId) { return chk(await sb.from("workout_logs").select("*").eq("client_id", clientId).order("date", { ascending: false }).order("created_at", { ascending: false }).limit(300)).map(fromWorkoutRow); },
-    async addWorkout(w) { return fromWorkoutRow(chk(await sb.from("workout_logs").insert({ client_id: w.clientId, date: w.date, day_name: w.dayName || null, entries: w.entries, note: w.note || null }).select().single())); },
+    async addWorkout(w) {
+      const row = { client_id: w.clientId, date: w.date, day_name: w.dayName || null, entries: w.entries, note: w.note || null, program: w.program || null };
+      let res = await sb.from("workout_logs").insert(row).select().single();
+      if (res.error && isMissing(res.error)) { delete row.program; res = await sb.from("workout_logs").insert(row).select().single(); }
+      return fromWorkoutRow(chk(res));
+    },
     async deleteWorkout(id) { chk(await sb.from("workout_logs").delete().eq("id", id)); },
     async saveTemplate(t, id) {
-      const row = { name: t.name, title: t.title || null, notes: t.notes || null, days: t.days };
-      return fromTplRow(id ? chk(await sb.from("plan_templates").update(row).eq("id", id).select().single()) : chk(await sb.from("plan_templates").insert(row).select().single()));
+      const row = { name: t.name, title: t.title || null, notes: t.notes || null, days: t.days, program: t.program || null };
+      const save = r => id ? sb.from("plan_templates").update(r).eq("id", id).select().single() : sb.from("plan_templates").insert(r).select().single();
+      let res = await save(row);
+      if (res.error && isMissing(res.error)) { delete row.program; res = await save(row); }
+      return fromTplRow(chk(res));
     },
     async deleteTemplate(id) { chk(await sb.from("plan_templates").delete().eq("id", id)); }
   };
@@ -242,13 +255,22 @@ function demoApi(asClient) {
     });
     return { id: "w" + date + dayIdx, clientId: "c1", date, dayName: day.name, note: "", enteredBy: "me", createdAt: date + "T17:00:00Z", entries };
   };
-  let workouts = [logDay("2026-09-07", 0, 0), logDay("2026-09-08", 1, 0), logDay("2026-09-14", 0, 1), logDay("2026-09-15", 1, 1), logDay("2026-09-21", 0, 2), logDay("2026-09-22", 1, 2), logDay("2026-09-28", 0, 3), logDay("2026-09-29", 1, 3)];
+  /* Sample program run: the 8-week Strength Builder, started 3 weeks ago. */
+  const SB = { notes: "4 days a week: Monday, Tuesday, Thursday, Friday. Each day is about 45 minutes of lifting, then 30 minutes of Zone 2 (the 45/30 rule). Every muscle gets trained twice a week with 10\u201316 hard sets, the range research supports for growth. Main lifts get heavier every two weeks; accessories stay close to failure for muscle. Week 7 is a deload, week 8 is PR week.", days: [{"name": "Mon · Upper A (bench)", "items": [{"name": "Barbell or Dumbbell Bench Press", "sets": "4", "reps": "6–8", "rest": "3 min", "note": "Main lift. Same setup every time: feet planted, shoulder blades pinched.", "ref": "chest", "kind": "main"}, {"name": "Barbell or Dumbbell Row", "sets": "4", "reps": "6–8", "rest": "2–3 min", "note": "", "ref": "back", "kind": "main"}, {"name": "Seated Dumbbell Shoulder Press", "sets": "3", "reps": "10–12", "rest": "90 sec", "note": "", "ref": "shoulders", "kind": "acc"}, {"name": "Pull-Up or Lat Pulldown", "sets": "3", "reps": "10–12", "rest": "90 sec", "note": "", "ref": "back", "kind": "acc"}, {"name": "Triceps Pushdown", "sets": "3", "reps": "10–12", "rest": "60 sec", "note": "", "ref": "arms", "kind": "acc"}, {"name": "Zone 2 walk (incline treadmill or outside)", "sets": "1", "reps": "30 min", "rest": "", "note": "Right after lifting. You can talk in full sentences, but not sing.", "ref": ""}]}, {"name": "Tue · Lower A (squat)", "items": [{"name": "Back Squat or Goblet Squat", "sets": "4", "reps": "6–8", "rest": "3 min", "note": "Main lift. Brace hard, sit between your hips, drive up.", "ref": "legs", "kind": "main"}, {"name": "Romanian Deadlift", "sets": "4", "reps": "6–8", "rest": "2–3 min", "note": "", "ref": "legs", "kind": "main"}, {"name": "Leg Press", "sets": "3", "reps": "10–12", "rest": "2 min", "note": "", "ref": "legs", "kind": "acc"}, {"name": "Lying or Seated Leg Curl", "sets": "3", "reps": "10–12", "rest": "90 sec", "note": "", "ref": "legs", "kind": "acc"}, {"name": "Standing Calf Raise", "sets": "3", "reps": "10–12", "rest": "60 sec", "note": "", "ref": "legs", "kind": "acc"}, {"name": "Zone 2 walk (incline treadmill or outside)", "sets": "1", "reps": "30 min", "rest": "", "note": "Right after lifting. You can talk in full sentences, but not sing.", "ref": ""}]}, {"name": "Thu · Upper B (press)", "items": [{"name": "Seated Dumbbell Shoulder Press", "sets": "4", "reps": "6–8", "rest": "2–3 min", "note": "Main lift today.", "ref": "shoulders", "kind": "main"}, {"name": "Pull-Up or Lat Pulldown", "sets": "4", "reps": "6–8", "rest": "2–3 min", "note": "", "ref": "back", "kind": "main"}, {"name": "Incline Dumbbell Press", "sets": "3", "reps": "10–12", "rest": "90 sec", "note": "", "ref": "chest", "kind": "acc"}, {"name": "Seated Cable Row", "sets": "3", "reps": "10–12", "rest": "90 sec", "note": "", "ref": "back", "kind": "acc"}, {"name": "Dumbbell Lateral Raise", "sets": "3", "reps": "12–15", "rest": "60 sec", "note": "", "ref": "shoulders", "kind": "acc"}, {"name": "EZ-Bar Curl", "sets": "3", "reps": "10–12", "rest": "60 sec", "note": "", "ref": "arms", "kind": "acc"}, {"name": "Zone 2 walk (incline treadmill or outside)", "sets": "1", "reps": "30 min", "rest": "", "note": "Right after lifting. You can talk in full sentences, but not sing.", "ref": ""}]}, {"name": "Fri · Lower B (hips)", "items": [{"name": "Barbell Hip Thrust", "sets": "4", "reps": "6–8", "rest": "2–3 min", "note": "Main lift. Pause one second at the top.", "ref": "glutes", "kind": "main"}, {"name": "Bulgarian Split Squat", "sets": "3", "reps": "10–12", "rest": "90 sec", "note": "Reps are per leg.", "ref": "glutes", "kind": "acc"}, {"name": "Goblet or Back Squat", "sets": "3", "reps": "10–12", "rest": "2 min", "note": "Lighter second squat day. Smooth, controlled reps.", "ref": "legs", "kind": "acc"}, {"name": "Lying or Seated Leg Curl", "sets": "3", "reps": "10–12", "rest": "90 sec", "note": "", "ref": "legs", "kind": "acc"}, {"name": "Hanging or Captain's Chair Knee Raise", "sets": "3", "reps": "10–15", "rest": "60 sec", "note": "", "ref": "core"}, {"name": "Zone 2 walk (incline treadmill or outside)", "sets": "1", "reps": "30 min", "rest": "", "note": "Right after lifting. You can talk in full sentences, but not sing.", "ref": ""}]}], program: {"name": "8-Week Strength Builder", "weeks": 8, "daysPerWeek": 4, "phases": [{"from": 1, "to": 2, "name": "Build", "note": "Learn the lifts and find your working weights. Main lifts: stop with about 2 good reps left. Accessories: 1–2 left. When you hit the top of the rep range on every set, add weight next time (about 5 lb upper body, 5–10 lb lower body).", "main": {"sets": 4, "reps": "6–8", "rir": "2", "rest": "2–3 min"}, "acc": {"sets": 3, "reps": "10–12", "rir": "1–2"}}, {"name": "Load", "from": 3, "to": 4, "note": "Heavier: fewer reps, more weight. Keep 2 reps in the tank on main lifts. Push accessories closer to failure.", "main": {"sets": 4, "reps": "5–6", "rir": "2", "rest": "3 min"}, "acc": {"sets": 3, "reps": "8–10", "rir": "1–2"}}, {"name": "Strength", "from": 5, "to": 6, "note": "The heaviest block. 5 sets on the main lifts, 1–2 reps in the tank. Rest the full 3 minutes so every set is strong.", "main": {"sets": 5, "reps": "4–5", "rir": "1–2", "rest": "3 min"}, "acc": {"sets": 3, "reps": "8–10", "rir": "1"}}, {"name": "Deload", "from": 7, "to": 7, "deload": true, "note": "Recovery week. Use about 85–90% of last week's weights and leave plenty in the tank. This is when your body catches up and gets stronger.", "main": {"sets": 3, "reps": "5", "rir": "4", "rest": "2 min"}, "acc": {"sets": 2, "reps": "10", "rir": "3"}}, {"name": "PR week", "from": 8, "to": 8, "peak": true, "note": "Show what you've built. Warm up well, then go for your best sets on the main lifts. Your new records show up in Strength.", "main": {"sets": 3, "reps": "3–5", "rir": "0–1", "rest": "3–4 min"}, "acc": {"sets": 2, "reps": "8–10", "rir": "1"}}]} };
+  { const d = new Date(); d.setDate(d.getDate() - 17 - ((d.getDay() + 6) % 7)); plans.c1 = { title: "8-Week Strength Builder", notes: SB.notes, days: JSON.parse(JSON.stringify(SB.days)), program: { ...SB.program, start: d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) }, updatedAt: new Date().toISOString() }; }
+  let workouts = [];
+  { const pk = `${plans.c1.program.name}|${plans.c1.program.start}|8|4`, st = toDate(plans.c1.program.start);
+    for (let wk = 0; wk < 3; wk++) [0, 1, 3, 4].forEach((off, di) => { const d = new Date(st); d.setDate(d.getDate() + wk * 7 + off); if (d > new Date()) return;
+      const day = plans.c1.days[di], date = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+      workouts.push({ id: "w" + date, clientId: "c1", date, dayName: day.name, note: "", program: pk, enteredBy: "me", createdAt: date + "T17:00:00Z",
+        entries: day.items.map((x, k) => /min/.test(x.reps) ? { name: x.name, ref: x.ref, target: "30 min", timed: true, done: true, sets: [] }
+          : { name: x.name, ref: x.ref, target: `${x.sets} × ${x.reps}`, timed: false, done: true, sets: Array.from({ length: +x.sets || 3 }, (_, si) => ({ lb: [95, 85, 30, 70, 40, 25][k] + wk * (x.kind === "main" ? 10 : 5), reps: Math.max(5, 8 - si) })) }) }); }); }
   /* Sample Apple Health days for the demo client, newest first. */
   const health = Array.from({ length: 21 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - i); const iso = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
     return { date: iso, steps: 7000 + ((i * 1337) % 4200), sleepH: 6.4 + ((i * 7) % 12) / 10, weight: +(154.6 + i * 0.12).toFixed(1), kcal: 380 + ((i * 53) % 260), exMin: 22 + ((i * 11) % 35), rhr: 61 + (i % 4), hrv: i === 0 ? 54 : 42 + ((i * 7) % 11), kcalIn: i === 0 ? 1180 : 1700 + ((i * 97) % 300), protein: i === 0 ? 96 : 120 + ((i * 7) % 30), carbs: i === 0 ? 104 : 150 + ((i * 13) % 40), fat: i === 0 ? 41 : 55 + ((i * 5) % 15), updatedAt: "2026-10-01T07:30:00Z" }; });
   /* Sample water: today partly done, the last two weeks mostly near goal. */
   const water = Array.from({ length: 14 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - i); return { date: d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()), oz: i === 0 ? 32 : [80, 64, 72, 88, 56, 80, 72, 64, 88, 80, 72, 48, 80][i - 1] }; });
-  const templates = [{ id: "t1", name: "Sample 3-day plan", title: plans.c1.title, notes: plans.c1.notes, days: JSON.parse(JSON.stringify(plans.c1.days)) }];
+  const templates = [{ id: "t1", name: "8-Week Strength Builder (4-day Upper/Lower)", title: "8-Week Strength Builder", notes: SB.notes, days: JSON.parse(JSON.stringify(SB.days)), program: JSON.parse(JSON.stringify(SB.program)) }];
   const photos = {};
   const wait = () => new Promise(r => setTimeout(r, 120));
   return {
@@ -348,7 +370,7 @@ function render() {
   }
   if (!S.clients.length) { app.innerHTML = welcome(); const b = $("#welcomeAdd"); if (b) b.onclick = () => openClient(null); return; }
   const c = client(); const s = series(c, S.checkins);
-  app.innerHTML = `<div class="stack">${head(c, s)}${coachCallout(c)}${todayCard(c)}${scoreCard(c)}${healthCard(c)}${waterCard(c)}${fuelCard(c)}${trendsCard()}${tiles(c, s)}${s.rows.length ? calNote(c, s) : ""}${planCard(c)}${workoutsCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div>${RENOVO && !S.isTrainer ? shopCard() : ""}${acctFoot()}</div>`;
+  app.innerHTML = `<div class="stack">${head(c, s)}${coachCallout(c)}${todayCard(c)}${scoreCard(c)}${healthCard(c)}${waterCard(c)}${fuelCard(c)}${trendsCard()}${tiles(c, s)}${s.rows.length ? calNote(c, s) : ""}${planCard(c)}${strengthCard()}${badgesCard(c)}${workoutsCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div>${RENOVO && !S.isTrainer ? shopCard() : ""}${acctFoot()}</div>`;
   wire(c, s);
   const da = $("#delAcct"); if (da) da.onclick = openDeleteAccount;
 }
@@ -670,6 +692,7 @@ function wire(c, s) {
   });
   $$("[data-reply]").forEach(b => b.onclick = () => openReply(c, S.checkins.find(x => x.id === b.dataset.reply)));
   $$("[data-metric]").forEach(b => b.onclick = () => { S.metric = b.dataset.metric; render(); });
+  const lp = $("#liftPick"); if (lp) lp.onchange = () => { S.lift = lp.value; const card = document.querySelector(".strength"); if (card) { card.outerHTML = strengthCard(); wire(c, s); } };
   $$("[data-trend]").forEach(b => b.onclick = () => { S.trend = b.dataset.trend; const card = document.querySelector(".trends"); if (card) { card.outerHTML = trendsCard(); wire(c, s); } });
   $$("[data-tspan]").forEach(b => b.onclick = () => { S.trendSpan = +b.dataset.tspan; const card = document.querySelector(".trends"); if (card) { card.outerHTML = trendsCard(); wire(c, s); } });
   $$("[data-view]").forEach(b => b.onclick = () => { S.view = b.dataset.view; render(); });
@@ -1082,6 +1105,101 @@ function todayCard(c) {
     <div class="dgrid">${rec}${slp}${str}</div>${tip ? `<p class="dtip">${esc(tip)}</p>` : ""}${detail ? `<p class="ddetail">${detail}</p>` : ""}</section>`;
 }
 
+/* ---------- strength: estimated 1-rep max, PRs ---------- */
+/* Epley estimate from any set of 1–12 reps, so nobody has to max out to see progress. */
+const e1rm = (lb, reps) => lb > 0 && reps >= 1 && reps <= 12 ? lb * (1 + (reps === 1 ? 0 : reps / 30)) : null;
+const bestE1 = e => Math.max(0, ...(e.sets || []).map(st => e1rm(st.lb, st.reps) || 0)) || null;
+/* Oldest-first history per lift: [{ date, e1, top: "185 × 8" }]. */
+function liftHistory(workouts) {
+  const by = {};
+  [...workouts].sort((a, b) => a.date.localeCompare(b.date) || String(a.createdAt).localeCompare(String(b.createdAt))).forEach(w => w.entries.forEach(e => {
+    if (e.timed) return; const v = bestE1(e); if (!v) return;
+    const st = e.sets.reduce((a, s) => (e1rm(s.lb, s.reps) || 0) > (e1rm(a.lb, a.reps) || 0) ? s : a, e.sets[0]);
+    (by[e.name] ||= []).push({ date: w.date, e1: v, top: fmtSet(st) });
+  }));
+  return by;
+}
+/* Every time a lift's estimated max beat its previous best (the first session doesn't count). */
+function prEvents(workouts) {
+  const out = [];
+  Object.entries(liftHistory(workouts)).forEach(([n, a]) => { let best = a[0].e1; a.slice(1).forEach(p => { if (p.e1 > best + 0.01) { out.push({ name: n, date: p.date, e1: p.e1, from: best, top: p.top }); best = p.e1; } }); });
+  return out.sort((a, b) => b.date.localeCompare(a.date));
+}
+/* Main lifts in the current plan first, then the classic compound lifts, then everything else. */
+const MAIN_FIRST = n => S.plan && S.plan.days.some(d => d.items.some(x => x.kind === "main" && x.name === n)) ? 0 : /bench|squat|deadlift|hip thrust|press|row|pull-?up|pulldown/i.test(n) ? 1 : 2;
+function strengthCard() {
+  if (S.workoutsMissing || !S.workouts.length) return "";
+  const hist = liftHistory(S.workouts), lifts = Object.keys(hist).filter(n => hist[n].length >= 2).sort((a, b) => MAIN_FIRST(a) - MAIN_FIRST(b) || hist[b].length - hist[a].length);
+  if (!lifts.length) return "";
+  if (!lifts.includes(S.lift)) S.lift = lifts[0];
+  const a = hist[S.lift], first = a[0], best = a.reduce((m, p) => p.e1 > m.e1 ? p : m, a[0]), gain = best.e1 - first.e1;
+  const W = 340, H = 120, L = 6, R = 6, T = 12, B = 18, lo = Math.min(...a.map(p => p.e1)) * 0.97, hi = Math.max(...a.map(p => p.e1)) * 1.02;
+  const x = i => L + (a.length === 1 ? (W - L - R) / 2 : i * (W - L - R) / (a.length - 1)), y = v => T + (H - T - B) - (v - lo) / (hi - lo || 1) * (H - T - B);
+  const pts = a.map((p, i) => `${x(i).toFixed(1)},${y(p.e1).toFixed(1)}`).join(" ");
+  let run = 0; const dots = a.map((p, i) => { const pr = i > 0 && p.e1 > run + 0.01; run = Math.max(run, p.e1); return `<circle cx="${x(i).toFixed(1)}" cy="${y(p.e1).toFixed(1)}" r="${pr ? 4.5 : 3}" fill="${pr ? "#f5a524" : "var(--blue)"}"/>`; }).join("");
+  const svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(S.lift)} estimated max over time"><polyline points="${pts}" fill="none" stroke="var(--blue)" stroke-width="2.2" stroke-linejoin="round"/>${dots}
+    <text x="${L}" y="${H - 4}" font-size="10" fill="var(--muted)">${fmtD(first.date)}</text><text x="${W - R}" y="${H - 4}" font-size="10" fill="var(--muted)" text-anchor="end">${fmtD(a[a.length - 1].date)}</text></svg>`;
+  const prs = prEvents(S.workouts).slice(0, 4);
+  return `<section class="card strength"><div class="card-h"><div><div class="kicker">Strength</div><h2>Estimated max</h2></div><span class="muted small">${prEvents(S.workouts).length} PRs</span></div>
+    <label class="small muted" for="liftPick" hidden>Lift</label><select id="liftPick" class="liftpick">${lifts.map(n => `<option${n === S.lift ? " selected" : ""}>${esc(n)}</option>`).join("")}</select>
+    <div class="tr-sum"><span class="big">${Math.round(best.e1)}<small> lb est. 1-rep max</small></span><span class="small ${gain > 0 ? "up" : "muted"}">${gain > 0 ? `▲ ${Math.round(gain)} lb since ${fmtD(first.date)}` : `Best set: ${best.top}`}</span></div>
+    ${svg}<p class="small muted" style="margin:4px 0 0">Orange dots are personal records. Estimated from your best set each session (weight × reps), so you never have to max out.</p>
+    ${prs.length ? `<ul class="prlist">${prs.map(p => `<li><span>🏆 ${esc(p.name)}</span><b>${Math.round(p.e1)} lb</b><em>${fmtD(p.date)}</em></li>`).join("")}</ul>` : ""}</section>`;
+}
+
+/* ---------- badges ---------- */
+const mondayOf = iso => { const d = toDate(iso), k = (d.getDay() + 6) % 7; d.setDate(d.getDate() - k); return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); };
+/* Longest run of consecutive calendar days in a sorted list of ISO dates. */
+function longestDayRun(dates) { let best = 0, run = 0, prev = null; [...new Set(dates)].sort().forEach(d => { run = prev && days(prev, d) === 1 ? run + 1 : 1; best = Math.max(best, run); prev = d; }); return best; }
+function badgeList(c) {
+  const out = [], add = (id, icon, title, desc, have, need) => out.push({ id, icon, title, desc, earned: have >= need, pct: Math.max(0, Math.min(1, have / need)) });
+  // Consistency
+  const nW = S.workouts.length;
+  [[1, "First workout"], [10, "10 workouts"], [25, "25 workouts"], [50, "50 workouts"], [100, "100 workouts"], [250, "250 workouts"]].forEach(([n, t]) => add("w" + n, "🏋️", t, `Log ${n} workout${n > 1 ? "s" : ""}`, nW, n));
+  const perWeek = S.plan && S.plan.days.length ? Math.min(7, S.plan.days.length) : 3, wk = {};
+  S.workouts.forEach(w => { const k = mondayOf(w.date); wk[k] = (wk[k] || 0) + 1; });
+  let bestStreak = 0, run = 0, prev = null;
+  Object.keys(wk).sort().forEach(k => { if (wk[k] < perWeek) { run = 0; prev = k; return; } run = prev && days(prev, k) === 7 && run ? run + 1 : 1; bestStreak = Math.max(bestStreak, run); prev = k; });
+  [2, 4, 8, 12, 26].forEach(n => add("st" + n, "🔥", `${n}-week streak`, `Every planned workout, ${n} weeks in a row`, bestStreak, n));
+  // Programs
+  const runs = {}; S.workouts.forEach(w => { if (w.program) runs[w.program] = (runs[w.program] || 0) + 1; });
+  const cur = S.plan && S.plan.program ? progKey(S.plan.program) : "";
+  if (cur && !runs[cur]) runs[cur] = 0;
+  Object.entries(runs).forEach(([k, n]) => { const [name, start, weeks, dpw] = k.split("|"), total = Math.max(1, Math.round((+weeks || 6) * (+dpw || perWeek) * 0.8));
+    add("p:" + k, "🏁", `${name} complete`, `Finish 80% of the workouts (${total}) in ${name}, started ${fmtD(start)}`, n, total); });
+  // Strength
+  const nPR = prEvents(S.workouts).length;
+  [[1, "First PR"], [10, "10 PRs"], [25, "25 PRs"], [50, "50 PRs"]].forEach(([n, t]) => add("pr" + n, "🏆", t, `Beat your best estimated max ${n} time${n > 1 ? "s" : ""}`, nPR, n));
+  // Steps
+  const steps = S.health.filter(h => h.steps != null), maxSteps = Math.max(0, ...steps.map(h => h.steps));
+  [5, 10, 15, 20, 25].forEach(k => add("s" + k, "👟", `${k}K steps`, `Walk ${k},000 steps in one day`, maxSteps, k * 1000));
+  add("s10x7", "👟", "10K week", "10,000+ steps 7 days in a row", longestDayRun(steps.filter(h => h.steps >= 10000).map(h => h.date)), 7);
+  // Goals
+  if (!S.waterMissing) {
+    const g = waterGoal(c), hit = S.water.filter(w => w.oz >= g).map(w => w.date);
+    [[7, "Hydrated week"], [30, "30 hydrated days"], [100, "100 hydrated days"]].forEach(([n, t]) => add("wa" + n, "💧", t, `Hit your water goal on ${n} days`, hit.length, n));
+    add("wa7s", "💧", "Water streak", "Water goal 7 days in a row", longestDayRun(hit), 7);
+  }
+  if (c.proteinGoal) { const ph = S.health.filter(h => h.protein != null && h.protein >= c.proteinGoal * 0.95).length; [[7, "Protein week"], [30, "Protein pro"]].forEach(([n, t]) => add("pg" + n, "🥩", t, `Hit your protein goal on ${n} days`, ph, n)); }
+  [[4, "4 check-ins"], [12, "12 check-ins"], [26, "26 check-ins"]].forEach(([n, t]) => add("ci" + n, "📏", t, `Log ${n} check-ins`, S.checkins.length, n));
+  return out;
+}
+function badgesCard(c) {
+  const all = badgeList(c), got = all.filter(b => b.earned);
+  // Celebrate badges earned since this person last looked (clients only; the first visit just records them).
+  try {
+    if (!S.isTrainer && !DEMO) {
+      const key = `rv_badges_${c.id}`, seen = JSON.parse(store.get(key) || "null"), ids = got.map(b => b.id);
+      if (seen) { const fresh = got.filter(b => !seen.includes(b.id)); if (fresh.length) setTimeout(() => toast(`🏅 Badge unlocked: ${fresh.map(b => b.title).join(", ")}`), 600); }
+      store.set(key, JSON.stringify(ids));
+    }
+  } catch (_) {}
+  const next = all.filter(b => !b.earned).sort((a, b) => b.pct - a.pct).slice(0, 3);
+  return `<section class="card badges"><div class="card-h"><div><div class="kicker">Badges</div><h2>Trophy case</h2></div><span class="muted small">${got.length} of ${all.length}</span></div>
+    ${got.length ? `<div class="bgrid">${got.map(b => `<div class="badge" title="${esc(b.desc)}"><span class="bi">${b.icon}</span><span class="bt">${esc(b.title)}</span></div>`).join("")}</div>` : `<p class="small muted">Log workouts, hit your water goal and walk to earn your first badges.</p>`}
+    ${next.length ? `<div class="bnext"><div class="lbl">Next up</div>${next.map(b => `<div class="bn"><span class="bi off">${b.icon}</span><div class="bnt"><b>${esc(b.title)}</b><span>${esc(b.desc)}</span><span class="sc-bar"><span style="width:${Math.round(b.pct * 100)}%"></span></span></div></div>`).join("")}</div>` : ""}</section>`;
+}
+
 /* ---------- weekly score + trends ---------- */
 const isoOf = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
 const daysBack = n => { const t = todayISO(); return Array.from({ length: n }, (_, i) => { const d = toDate(t); d.setDate(d.getDate() - i); return isoOf(d); }); };
@@ -1226,13 +1344,39 @@ function exPics(name, ref) {
   const u = refUrl(ref), inner = img(0, "start") + img(1, "finish");
   return u ? `<a class="xpics" href="${u}" target="_blank" rel="noopener" aria-label="${esc(name)} form tips">${inner}</a>` : `<div class="xpics">${inner}</div>`;
 }
+/* ---------- programs: weeks, phases and progression ---------- */
+/* A program lives on the plan as { name, weeks, daysPerWeek, start, phases: [{ from, to, name, note, deload, peak, main: {sets, reps, rir, rest}, acc: {sets, reps, rir, rest} }] }.
+   Exercises tagged kind "main" or "acc" take this week's sets, reps and effort; everything else (walks, carries) stays as written. */
+const nextMonday = () => { const d = toDate(todayISO()), k = (8 - d.getDay()) % 7; d.setDate(d.getDate() + k); return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); };
+function progWeek(pr) { if (!pr || !pr.start || !pr.weeks) return null; const d = days(pr.start, todayISO()); if (d < 0) return 0; const w = Math.floor(d / 7) + 1; return w > pr.weeks ? pr.weeks + 1 : w; }
+const progPhase = (pr, wk) => (pr && pr.phases || []).find(ph => wk >= ph.from && wk <= ph.to) || null;
+const progKey = pr => pr && pr.start ? `${pr.name}|${pr.start}|${pr.weeks}|${pr.daysPerWeek || 0}` : "";
+function itemForWeek(x, pr, wk) {
+  if (!pr || !x.kind || !wk || wk > pr.weeks) return x;
+  const ph = progPhase(pr, wk), sp = ph && (x.kind === "main" ? ph.main : ph.acc);
+  if (!sp) return x;
+  return { ...x, sets: String(sp.sets), reps: String(sp.reps), rir: sp.rir != null ? String(sp.rir) : "", rest: sp.rest || x.rest, deload: !!ph.deload, peak: !!ph.peak };
+}
+const rirTxt = x => x.rir ? ` · ${x.rir} in the tank` : "";
+function progBar(p) {
+  const pr = p.program; if (!pr) return "";
+  const wk = progWeek(pr), key = progKey(pr);
+  const done = S.workouts.filter(w => w.program === key).length, total = pr.weeks * (pr.daysPerWeek || p.days.length);
+  if (wk === 0) return `<div class="prog"><div class="prog-top"><b>${esc(pr.name)}</b><span class="muted small">Starts ${fmtD(pr.start)}</span></div><p class="prog-note">${pr.weeks} weeks · ${pr.daysPerWeek || p.days.length} days a week. Week 1 starts ${toDate(pr.start).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}.</p></div>`;
+  if (wk > pr.weeks) return `<div class="prog done"><div class="prog-top"><b>🏁 ${esc(pr.name)} complete</b><span class="muted small">${done} of ${total} workouts</span></div><p class="prog-note">${S.isTrainer ? "Time to pick the next program." : `Amazing work. ${esc(TRAINER)} will set up your next phase.`}</p></div>`;
+  const ph = progPhase(pr, wk);
+  return `<div class="prog"><div class="prog-top"><b>Week ${wk} of ${pr.weeks}</b>${ph ? `<span class="prog-ph${ph.deload ? " dl" : ph.peak ? " pk" : ""}">${esc(ph.name)}</span>` : ""}<span class="muted small">${done}/${total} workouts</span></div>
+    <div class="prog-bar"><span style="width:${Math.min(100, Math.round(done / total * 100))}%"></span><i style="left:${Math.min(100, Math.round((wk - 1) / pr.weeks * 100))}%"></i></div>${ph && ph.note ? `<p class="prog-note">${esc(ph.note)}</p>` : ""}</div>`;
+}
+
 function planDays(p) {
   const canLog = !S.workoutsMissing;
+  const wk = progWeek(p.program);
   return `<div class="days">${p.days.map((d, i) => `<div class="day"><div class="day-h"><span class="dnum">Day ${i + 1}</span><h3>${esc(d.name || "Workout")}</h3>${canLog ? `<button type="button" class="btn primary sm startw" data-start="${i}">${S.isTrainer ? "Log workout" : "Start workout"}</button>` : ""}${lastDone(d.name)}</div>
-    <ol class="plist">${(d.items || []).map(x => { const u = refUrl(x.ref);
-      const sr = [x.sets ? `${esc(x.sets)} × ${esc(x.reps || "")}` : esc(x.reps || ""), x.rest ? `rest ${esc(x.rest)}` : ""].filter(Boolean).join(" · ");
+    <ol class="plist">${(d.items || []).map(x0 => { const x = itemForWeek(x0, p.program, wk), u = refUrl(x.ref);
+      const sr = [x.sets ? `${esc(x.sets)} × ${esc(x.reps || "")}` : esc(x.reps || ""), x.rir ? `${esc(x.rir)} in the tank` : "", x.rest ? `rest ${esc(x.rest)}` : ""].filter(Boolean).join(" · ");
       const pics = exPics(x.name, x.ref);
-      return `<li${pics ? ` class="haspic"` : ""}>${pics}<div class="ptxt"><div class="pname">${esc(x.name)}</div>${sr ? `<div class="psr">${sr}</div>` : ""}${x.note ? `<div class="pnote">${esc(x.note)}</div>` : ""}${u ? `<a class="plink" href="${u}" target="_blank" rel="noopener">Form tips →</a>` : ""}</div></li>`; }).join("")}</ol></div>`).join("")}</div>`;
+      return `<li${pics ? ` class="haspic"` : ""}>${pics}<div class="ptxt"><div class="pname">${esc(x.name)}${x.kind === "main" ? ` <span class="mtag">Main lift</span>` : ""}</div>${sr ? `<div class="psr">${sr}</div>` : ""}${x.note ? `<div class="pnote">${esc(x.note)}</div>` : ""}${u ? `<a class="plink" href="${u}" target="_blank" rel="noopener">Form tips →</a>` : ""}</div></li>`; }).join("")}</ol></div>`).join("")}</div>`;
 }
 function planCard(c) {
   if (S.planMissing) return S.isTrainer ? `<section class="card"><div class="card-h"><h2>Workout plan</h2></div><div class="empty">Workout plans and check-in replies need a one-time database update. Run <code>supabase/schema.sql</code> again in the Supabase SQL Editor, then reload. Steps are in <code>tracker/SETUP.md</code>.</div></section>` : "";
@@ -1242,7 +1386,7 @@ function planCard(c) {
   }
   return `<section class="card plan"><div class="card-h"><div><div class="kicker">${S.isTrainer ? "Workout plan" : `Your plan from ${esc(TRAINER)}`}</div><h2>${esc(p.title || "Workout plan")}</h2></div>
     ${S.isTrainer ? `<button class="btn" id="editPlan" type="button">Edit plan</button>` : (p.updatedAt ? `<span class="muted small">Updated ${fmtD(String(p.updatedAt).slice(0, 10), true)}</span>` : "")}</div>
-    ${p.notes ? `<p class="summary">${esc(p.notes)}</p>` : ""}${planDays(p)}</section>`;
+    ${progBar(p)}${p.notes ? `<p class="summary">${esc(p.notes)}</p>` : ""}${planDays(p)}</section>`;
 }
 
 /* Reply dialog (trainer). */
@@ -1271,11 +1415,11 @@ $("#rClear").onclick = () => saveReply("");
 /* Plan builder (trainer). */
 const LIB = window.WORKOUT_LIBRARY || [];
 let draft = null, planClient = null;
-const cleanDays = () => draft.days.map(d => ({ name: String(d.name || "").trim(), items: (d.items || []).map(x => ({ name: String(x.name || "").trim(), sets: String(x.sets || "").trim(), reps: String(x.reps || "").trim(), rest: String(x.rest || "").trim(), note: String(x.note || "").trim(), ref: x.ref || "" })).filter(x => x.name) })).filter(d => d.items.length);
+const cleanDays = () => draft.days.map(d => ({ name: String(d.name || "").trim(), items: (d.items || []).map(x => ({ name: String(x.name || "").trim(), sets: String(x.sets || "").trim(), reps: String(x.reps || "").trim(), rest: String(x.rest || "").trim(), note: String(x.note || "").trim(), ref: x.ref || "", ...(x.kind ? { kind: x.kind } : {}) })).filter(x => x.name) })).filter(d => d.items.length);
 const blankItem = () => ({ name: "", sets: "3", reps: "10", rest: "60 sec", note: "", ref: "" });
 function openPlan(c) {
   planClient = c;
-  draft = S.plan && S.plan.days.length ? JSON.parse(JSON.stringify({ title: S.plan.title, notes: S.plan.notes, days: S.plan.days })) : { title: "", notes: "", days: [{ name: "", items: [] }] };
+  draft = S.plan && S.plan.days.length ? JSON.parse(JSON.stringify({ title: S.plan.title, notes: S.plan.notes, days: S.plan.days, program: S.plan.program || null })) : { title: "", notes: "", days: [{ name: "", items: [] }], program: null };
   $("#plTitle").textContent = `Workout plan for ${firstName(c.name)}`;
   $("#plErr").textContent = ""; $("#plDelete").hidden = !(S.plan && S.plan.days.length);
   const del = $("#plDelete"); del.classList.remove("armed"); del.textContent = "Delete plan"; del.disabled = false;
@@ -1288,7 +1432,7 @@ function drawTemplateRow() {
 }
 $("#pl-tpl").onchange = () => {
   const t = S.templates.find(x => x.id === $("#pl-tpl").value); if (!t) return;
-  draft = { title: t.title || t.name, notes: t.notes || "", days: JSON.parse(JSON.stringify(t.days)) };
+  draft = { title: t.title || t.name, notes: t.notes || "", days: JSON.parse(JSON.stringify(t.days)), program: t.program ? { ...JSON.parse(JSON.stringify(t.program)), start: nextMonday() } : null };
   $("#plErr").textContent = ""; drawPlanEditor();
   toast(`Loaded "${t.name}". Adjust it for ${firstName(planClient.name)}, then Save plan.`);
 };
@@ -1300,7 +1444,8 @@ $("#plSaveTpl").onclick = async () => {
   const existing = S.templates.find(t => t.name.toLowerCase() === name.toLowerCase());
   const btn = $("#plSaveTpl"); btn.disabled = true; err.textContent = "";
   try {
-    await api.saveTemplate({ name, title: name, notes: (draft.notes || "").trim(), days }, existing?.id);
+    const program = draft.program ? (({ start, ...rest }) => rest)(draft.program) : null;
+    await api.saveTemplate({ name, title: name, notes: (draft.notes || "").trim(), days, program }, existing?.id);
     S.templates = await api.listTemplates(); drawTemplateRow();
     toast(existing ? `Template "${name}" updated` : `Saved "${name}" as a template. Pick it for any client.`);
   } catch (e) { console.error(e); err.textContent = isMissing(e) ? "Templates need the latest database update in tracker/SETUP.md." : "Couldn't save the template. Try again."; }
@@ -1310,6 +1455,9 @@ function drawPlanEditor() {
   const libOpts = `<option value="">Add a workout from your site…</option>` + ["Gym", "Home"].map(m => `<optgroup label="${m} workouts">${LIB.filter(w => w.label.endsWith(`(${m})`)).map(w => `<option value="${esc(w.id)}">${esc(w.label)}</option>`).join("")}</optgroup>`).join("");
   $("#planEd").innerHTML = `
     <div class="field"><label for="pl-title">Plan name</label><input id="pl-title" type="text" maxlength="120" data-top="title" value="${esc(draft.title)}" placeholder="e.g. Phase 1: Build the base"></div>
+    ${draft.program ? `<div class="prog-ed"><div><b>📅 ${esc(draft.program.name)}</b><span class="muted small"> · ${draft.program.weeks} weeks, sets and reps change each week</span></div>
+      <label class="mini"><span>Week 1 starts</span><input type="date" id="pl-start" value="${esc(draft.program.start || "")}"></label>
+      <button type="button" class="btn ghost sm danger" id="plNoProg">Remove program</button></div>` : ""}
     <div class="field"><label for="pl-notes">Notes for ${esc(firstName(planClient.name))}</label><textarea id="pl-notes" rows="2" maxlength="2000" data-top="notes" placeholder="e.g. 3 days a week. Walk 30 minutes in Zone 2 after each session.">${esc(draft.notes)}</textarea></div>
     ${draft.days.map((d, di) => `<fieldset class="ed-day"><legend>Day ${di + 1}</legend>
       <div class="ed-row1"><input type="text" maxlength="80" aria-label="Day ${di + 1} name" data-d="${di}" data-k="name" value="${esc(d.name)}" placeholder="Name, e.g. Lower body"><button type="button" class="btn ghost sm danger" data-rmday="${di}" aria-label="Remove day ${di + 1}">Remove day</button></div>
@@ -1320,6 +1468,7 @@ function drawPlanEditor() {
         <label class="mini"><span>Reps</span><input type="text" maxlength="24" aria-label="Reps" data-d="${di}" data-i="${ii}" enterkeyhint="next" data-k="reps" value="${esc(x.reps)}"></label>
         <label class="mini"><span>Rest</span><input type="text" maxlength="16" aria-label="Rest" data-d="${di}" data-i="${ii}" data-k="rest" value="${esc(x.rest)}"></label>
         <button type="button" class="xbtn" data-rm="${di}:${ii}" aria-label="Remove ${esc(x.name || "exercise")}">×</button>
+        ${draft.program ? `<select class="ed-kind" data-d="${di}" data-i="${ii}" data-k="kind" aria-label="How ${esc(x.name || "this exercise")} progresses"><option value=""${!x.kind ? " selected" : ""}>Fixed (as written)</option><option value="main"${x.kind === "main" ? " selected" : ""}>Main lift (follows program)</option><option value="acc"${x.kind === "acc" ? " selected" : ""}>Accessory (follows program)</option></select>` : ""}
         <input class="ed-note" type="text" maxlength="200" aria-label="Note for ${esc(x.name || "exercise")}" data-d="${di}" data-i="${ii}" data-k="note" value="${esc(x.note)}" placeholder="Note (optional), e.g. Use the 25s">
       </div>`).join("")}
       <div class="ed-add"><button type="button" class="btn sm" data-additem="${di}">+ Exercise</button><select data-lib="${di}" aria-label="Add a workout to day ${di + 1}">${libOpts}</select></div>
@@ -1328,6 +1477,7 @@ function drawPlanEditor() {
 }
 $("#planEd").addEventListener("input", ev => {
   const t = ev.target;
+  if (t.id === "pl-start" && draft.program) { draft.program.start = t.value; return; }
   if (t.dataset.top) draft[t.dataset.top] = t.value;
   else if (t.dataset.k && t.dataset.d != null) { const d = draft.days[+t.dataset.d]; if (t.dataset.i != null) d.items[+t.dataset.i][t.dataset.k] = t.value; else d[t.dataset.k] = t.value; }
 });
@@ -1342,6 +1492,7 @@ $("#planEd").addEventListener("change", ev => {
 $("#planEd").addEventListener("click", ev => {
   const b = ev.target.closest("button"); if (!b) return;
   if (b.id === "plAddDay") { draft.days.push({ name: "", items: [] }); drawPlanEditor(); }
+  else if (b.id === "plNoProg") { draft.program = null; draft.days.forEach(d => d.items.forEach(x => { delete x.kind; })); drawPlanEditor(); toast("Program removed. The plan keeps the sets and reps as written."); }
   else if (b.dataset.additem != null) { draft.days[+b.dataset.additem].items.push(blankItem()); drawPlanEditor(); const ins = $$(`[data-d="${b.dataset.additem}"][data-k="name"][data-i]`); ins[ins.length - 1]?.focus(); }
   else if (b.dataset.rm) { const [di, ii] = b.dataset.rm.split(":").map(Number); draft.days[di].items.splice(ii, 1); drawPlanEditor(); }
   else if (b.dataset.rmday != null) { draft.days.splice(+b.dataset.rmday, 1); if (!draft.days.length) draft.days.push({ name: "", items: [] }); drawPlanEditor(); }
@@ -1359,7 +1510,8 @@ $("#fPlan").onsubmit = async ev => {
   const err = $("#plErr");
   const days = cleanDays();
   if (!days.length) { err.textContent = "Add at least one exercise."; return; }
-  const p = { title: draft.title.trim(), notes: draft.notes.trim(), days };
+  if (draft.program && !/^\d{4}-\d{2}-\d{2}$/.test(draft.program.start || "")) { err.textContent = "Pick a start date for the program."; return; }
+  const p = { title: draft.title.trim(), notes: draft.notes.trim(), days, program: draft.program ? { ...draft.program, daysPerWeek: draft.program.daysPerWeek || days.length } : null };
   const btn = $("#plSave"); btn.disabled = true; btn.textContent = "Saving…"; err.textContent = "";
   try { S.plan = await api.savePlan(planClient.id, p); $("#dlgPlan").close(); toast(`Plan saved. ${firstName(planClient.name)} will see it next time they open the tracker.`); render(); }
   catch (e) { console.error(e); err.textContent = isMissing(e) ? "Run the database update in tracker/SETUP.md first." : "Couldn't save. Check your connection and try again."; }
@@ -1387,7 +1539,10 @@ function lastDone(dayName) {
 }
 /* "Add weight" nudge: every target set reached the top of the rep range last time. */
 function progressHint(x, prev) {
-  if (!prev || isTimed(x)) return "";
+  if (isTimed(x)) return "";
+  if (x.deload) return `<div class="hint">Deload week: use about 85–90% of last week's weight and leave plenty in the tank. This is when you recover and get stronger.</div>`;
+  if (x.peak && x.kind === "main") return `<div class="hint up">PR week: warm up well, then go for your best set. Stop if form breaks down.</div>`;
+  if (!prev) return "";
   const top = topRep(x), done = prev.e.sets.filter(st => st.reps != null);
   if (top && done.length >= nSets(x) && done.every(st => st.reps >= top)) return `<div class="hint up">You hit ${top} reps on every set last time. Add a little weight today (about 5 lb).</div>`;
   return "";
@@ -1396,10 +1551,11 @@ function progressHint(x, prev) {
 let wDraft = null, wClient = null;
 function openWorkout(c, dayIdx) {
   const day = S.plan.days[dayIdx]; wClient = c;
-  wDraft = { clientId: c.id, date: todayISO(), dayName: day.name || `Day ${dayIdx + 1}`, note: "",
-    entries: day.items.map(x => ({ name: x.name, ref: x.ref || "", target: [x.sets ? `${x.sets} ×` : "", x.reps || ""].join(" ").trim(), timed: isTimed(x), done: false,
+  const pr = S.plan.program, wk = progWeek(pr), inProg = pr && wk >= 1 && wk <= pr.weeks;
+  wDraft = { clientId: c.id, date: todayISO(), dayName: day.name || `Day ${dayIdx + 1}`, note: "", program: inProg ? progKey(pr) : "", week: inProg ? wk : null,
+    entries: day.items.map(x0 => itemForWeek(x0, pr, wk)).map(x => ({ name: x.name, ref: x.ref || "", target: [x.sets ? `${x.sets} ×` : "", x.reps || ""].join(" ").trim() + (x.rir ? ` · ${x.rir} in the tank` : ""), timed: isTimed(x), done: false,
       sets: isTimed(x) ? [] : Array.from({ length: nSets(x) }, () => ({ lb: "", reps: "" })), plan: x })) };
-  $("#wTitle").textContent = wDraft.dayName;
+  $("#wTitle").textContent = (wDraft.week ? `Week ${wDraft.week} · ` : "") + wDraft.dayName;
   $("#wSub").textContent = S.isTrainer ? `Logging for ${firstName(c.name)}` : "Log each set as you go. Leave a set blank if you skipped it.";
   $("#w-date").value = wDraft.date; $("#w-date").max = todayISO(); $("#w-note").value = ""; $("#wErr").textContent = "";
   drawWorkout(); stopRest(); $("#dlgWorkout").showModal(); keepAwake();
@@ -1475,10 +1631,14 @@ $("#fWorkout").onsubmit = async ev => {
   if (entries.some(e => e.sets.some(st => (st.lb != null && (st.lb < 0 || st.lb > 2000)) || (st.reps != null && (st.reps < 0 || st.reps > 200))))) { err.textContent = "Check the numbers: weight 0–2000 lb, reps 0–200."; return; }
   const btn = $("#wSave"); btn.disabled = true; btn.textContent = "Saving…"; err.textContent = "";
   try {
-    await api.addWorkout({ clientId: wClient.id, date, dayName: wDraft.dayName, entries, note: $("#w-note").value.trim() });
+    const before = S.workouts.slice();
+    await api.addWorkout({ clientId: wClient.id, date, dayName: wDraft.dayName, entries, note: $("#w-note").value.trim(), program: wDraft.program || null });
     $("#dlgWorkout").close(); await loadWorkouts();
     const sets = entries.reduce((a, e) => a + e.sets.length, 0);
-    toast(S.isTrainer ? `Workout logged for ${firstName(wClient.name)}` : `Workout saved: ${entries.length} exercises, ${sets} sets. Nice work!`); render();
+    const prevBest = liftHistory(before), prs = entries.map(e => { const v = bestE1(e), h = prevBest[e.name]; return v && h && h.length && v > Math.max(...h.map(p => p.e1)) + 0.01 ? { name: e.name, v } : null; }).filter(Boolean);
+    if (prs.length) toast(`🏆 New PR${prs.length > 1 ? "s" : ""}! ${prs.map(p => `${p.name}: ${Math.round(p.v)} lb est. max`).join(" · ")}`);
+    else toast(S.isTrainer ? `Workout logged for ${firstName(wClient.name)}` : `Workout saved: ${entries.length} exercises, ${sets} sets. Nice work!`);
+    render();
   } catch (e) { console.error(e); err.textContent = isMissing(e) ? "Workout logging needs the latest database update in tracker/SETUP.md." : "Couldn't save. Check your connection and try again."; }
   btn.disabled = false; btn.textContent = "Finish workout";
 };

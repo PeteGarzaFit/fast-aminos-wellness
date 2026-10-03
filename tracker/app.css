@@ -276,6 +276,7 @@ tr.crow .coach{position:sticky;left:0;max-width:min(640px,calc(100vw - 72px))}
 .rt-b button:hover{background:rgba(255,255,255,.16)}
 .rtimer.done{background:var(--good)}.rtimer.done .rt-next{color:#fff;font-weight:700}
 .rtimer.done .rt-time{animation:rtpulse 1s ease-in-out 3}
+.rtimer.final:not(.done) .rt-time{color:#5FD4FF;animation:rtpulse 1s ease-in-out infinite}
 @keyframes rtpulse{50%{opacity:.35}}
 @media (max-width:400px){.rt-time{font-size:28px}.rt-b button{padding:9px 9px;min-width:44px;font-size:14px}.rt-row{padding:10px 14px 12px}}
 

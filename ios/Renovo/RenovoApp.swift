@@ -1,19 +1,25 @@
+import AVFoundation
 import SwiftUI
+import UIKit
 
 /// RENOVO: the client tracker (plans, workout logging, check-ins) in a native shell,
 /// plus Apple Health sync and a weekly check-in reminder.
 @main
 struct RenovoApp: App {
     @StateObject private var model = AppModel()
-    @Environment(\.scenePhase) private var scenePhase
+
+    init() {
+        // Let the rest-timer beeps play even with the ringer on silent, mixed over the client's music.
+        try? AVAudioSession.sharedInstance().setCategory(.playback, options: [.mixWithOthers])
+    }
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(model)
-        }
-        .onChange(of: scenePhase) { phase in
-            if phase == .active { Task { @MainActor in model.appBecameActive() } }
+                .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                    Task { @MainActor in model.appBecameActive() }
+                }
         }
     }
 }

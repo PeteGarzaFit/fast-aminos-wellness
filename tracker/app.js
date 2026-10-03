@@ -1174,8 +1174,18 @@ function restSecs(str) {
   return Math.min(600, Math.max(15, Math.round(n)));
 }
 const fmtClock = sec => { sec = Math.max(0, Math.ceil(sec)); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`; };
-const RT = { end: 0, iv: null, done: false };
+const RT = { end: 0, iv: null, done: false, lastTick: null };
 let audioCtx = null;
+/* Short tick for the last 5 seconds of rest. */
+function tick(final) {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain(), t = audioCtx.currentTime;
+    o.frequency.value = final ? 880 : 660; o.connect(g); g.connect(audioCtx.destination);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.3, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12); o.start(t); o.stop(t + 0.14);
+  } catch (_) {}
+}
 function beep() {
   try {
     audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
@@ -1192,19 +1202,23 @@ function tickRest() {
     try { navigator.vibrate && navigator.vibrate([250, 120, 250]); } catch (_) {}
     beep(); return;
   }
+  /* 5, 4, 3, 2, 1: a tick each second so you can get set for the next set. */
+  const sec = Math.ceil(left);
+  if (!RT.done && sec <= 5 && sec >= 1 && sec !== RT.lastTick) { RT.lastTick = sec; tick(false); try { navigator.vibrate && navigator.vibrate(60); } catch (_) {} }
+  box.classList.toggle("final", !RT.done && sec <= 5);
   if (!RT.done) { $("#rtTime").textContent = fmtClock(left); $("#rtBar").style.width = Math.max(0, Math.min(100, left / RT.total * 100)) + "%"; }
 }
 function startRest(sec, next) {
   // A user gesture is happening right now, so the audio can be unlocked for the beep later.
   try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === "suspended") audioCtx.resume(); } catch (_) {}
-  RT.end = Date.now() + sec * 1000; RT.total = sec; RT.done = false;
+  RT.end = Date.now() + sec * 1000; RT.total = sec; RT.done = false; RT.lastTick = null;
   const box = $("#rTimer"); box.hidden = false; box.classList.remove("done");
   $("#rtNext").textContent = next || "Rest";
   clearInterval(RT.iv); RT.iv = setInterval(tickRest, 250); tickRest();
 }
 function adjustRest(d) {
   if (RT.done) { startRest(Math.max(15, d), $("#rtNext").textContent === "Time's up. Next set!" ? "Extra rest" : $("#rtNext").textContent); return; }
-  RT.end = Math.max(Date.now() + 1000, RT.end + d * 1000); RT.total = Math.max(RT.total, (RT.end - Date.now()) / 1000); tickRest();
+  RT.end = Math.max(Date.now() + 1000, RT.end + d * 1000); RT.lastTick = null; RT.total = Math.max(RT.total, (RT.end - Date.now()) / 1000); tickRest();
 }
 function stopRest() { clearInterval(RT.iv); RT.iv = null; RT.done = false; const box = $("#rTimer"); if (box) { box.hidden = true; box.classList.remove("done"); } }
 $("#rtMinus").onclick = () => adjustRest(-15);

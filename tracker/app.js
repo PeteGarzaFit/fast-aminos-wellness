@@ -118,7 +118,7 @@ const FEEL_KEYS = ["energy", "hunger", "sleep_q", "sleep_hours", "steps", "side_
 const SIDE_EFFECTS = ["Nausea", "Vomiting", "Constipation", "Diarrhea", "Heartburn", "Bloating", "Tired", "Headache", "Dizzy", "Low appetite"];
 const fromCheckinRow = r => ({ id: r.id, clientId: r.client_id, date: r.date, weight: num(r.weight_lb), waist: num(r.waist_in), neck: num(r.neck_in), hip: num(r.hip_in), omron: num(r.omron_bf), photoFront: r.photo_front, photoSide: r.photo_side, note: r.note, energy: num(r.energy), hunger: num(r.hunger), sleepQ: num(r.sleep_q), sleepH: num(r.sleep_hours), steps: num(r.steps), sideEffects: Array.isArray(r.side_effects) ? r.side_effects : [], coachNote: r.coach_note || null, coachNoteAt: r.coach_note_at || null, enteredBy: r.entered_by, createdAt: r.created_at });
 const fromWorkoutRow = r => ({ id: r.id, clientId: r.client_id, date: r.date, dayName: r.day_name || "", entries: Array.isArray(r.entries) ? r.entries : [], note: r.note || "", enteredBy: r.entered_by, createdAt: r.created_at });
-const fromHealthRow = r => ({ date: r.date, steps: num(r.steps), sleepH: num(r.sleep_hours), weight: num(r.weight_lb), kcal: num(r.active_kcal), exMin: num(r.exercise_min), rhr: num(r.resting_hr), kcalIn: num(r.kcal_in), protein: num(r.protein_g), carbs: num(r.carbs_g), fat: num(r.fat_g), updatedAt: r.updated_at });
+const fromHealthRow = r => ({ date: r.date, steps: num(r.steps), sleepH: num(r.sleep_hours), weight: num(r.weight_lb), kcal: num(r.active_kcal), exMin: num(r.exercise_min), rhr: num(r.resting_hr), kcalIn: num(r.kcal_in), protein: num(r.protein_g), carbs: num(r.carbs_g), fat: num(r.fat_g), hrv: num(r.hrv_ms), updatedAt: r.updated_at });
 const fromTplRow = r => ({ id: r.id, name: r.name, title: r.title || "", notes: r.notes || "", days: Array.isArray(r.days) ? r.days : [] });
 const fromPlanRow = r => r ? ({ title: r.title || "", notes: r.notes || "", days: Array.isArray(r.days) ? r.days : [], updatedAt: r.updated_at }) : null;
 /* Supabase reports a missing table/column when the October 2026 database update hasn't been run yet. */
@@ -179,10 +179,10 @@ function supaApi(sb) {
     async upsertHealth(clientId, rows) {
       /* Values outside the database limits are dropped (not the whole day), so one odd reading never blocks a sync. */
       const rng = (v, lo, hi, int) => { const n = num(v); if (n == null || n < lo || n > hi) return null; return int ? Math.round(n) : n; };
-      const clean = rows.map(r => ({ client_id: clientId, date: r.date, steps: rng(r.steps, 0, 200000, true), sleep_hours: rng(r.sleepHours, 0, 24), weight_lb: rng(r.weightLb, 50, 900), active_kcal: rng(r.activeKcal, 0, 20000, true), exercise_min: rng(r.exerciseMin, 0, 1440, true), resting_hr: rng(r.restingHr, 20, 250, true), kcal_in: rng(r.kcalIn, 0, 20000, true), protein_g: rng(r.proteinG, 0, 2000), carbs_g: rng(r.carbsG, 0, 3000), fat_g: rng(r.fatG, 0, 1000), source: "apple_health" }));
+      const clean = rows.map(r => ({ client_id: clientId, date: r.date, steps: rng(r.steps, 0, 200000, true), sleep_hours: rng(r.sleepHours, 0, 24), weight_lb: rng(r.weightLb, 50, 900), active_kcal: rng(r.activeKcal, 0, 20000, true), exercise_min: rng(r.exerciseMin, 0, 1440, true), resting_hr: rng(r.restingHr, 20, 250, true), kcal_in: rng(r.kcalIn, 0, 20000, true), protein_g: rng(r.proteinG, 0, 2000), carbs_g: rng(r.carbsG, 0, 3000), fat_g: rng(r.fatG, 0, 1000), hrv_ms: rng(r.hrvMs, 1, 300, true), source: "apple_health" }));
       if (!clean.length) return;
       let res = await sb.from("health_daily").upsert(clean, { onConflict: "client_id,date" });
-      if (res.error && isMissing(res.error)) res = await sb.from("health_daily").upsert(clean.map(({ kcal_in, protein_g, carbs_g, fat_g, ...r }) => r), { onConflict: "client_id,date" });
+      if (res.error && isMissing(res.error)) res = await sb.from("health_daily").upsert(clean.map(({ kcal_in, protein_g, carbs_g, fat_g, hrv_ms, ...r }) => r), { onConflict: "client_id,date" });
       chk(res);
     },
     async deleteAccount(clientIds) {
@@ -267,7 +267,7 @@ function demoApi(asClient) {
     async deletePlan(id) { await wait(); delete plans[id]; },
     async saveFeedback(eid, note) { await wait(); const e = entries.find(x => x.id === eid); e.coachNote = note || null; e.coachNoteAt = note ? new Date().toISOString() : null; return { ...e }; },
     async listHealth(id) { await wait(); return id === "c1" ? health.slice() : []; },
-    async upsertHealth(id, rows) { await wait(); rows.forEach(r => { const i = health.findIndex(h => h.date === r.date); const h = { date: r.date, steps: r.steps ?? null, sleepH: r.sleepHours ?? null, weight: r.weightLb ?? null, kcal: r.activeKcal ?? null, exMin: r.exerciseMin ?? null, rhr: r.restingHr ?? null, kcalIn: r.kcalIn ?? null, protein: r.proteinG ?? null, carbs: r.carbsG ?? null, fat: r.fatG ?? null, updatedAt: new Date().toISOString() }; if (i >= 0) health[i] = h; else health.push(h); }); health.sort((a, b) => b.date.localeCompare(a.date)); },
+    async upsertHealth(id, rows) { await wait(); rows.forEach(r => { const i = health.findIndex(h => h.date === r.date); const h = { date: r.date, steps: r.steps ?? null, sleepH: r.sleepHours ?? null, weight: r.weightLb ?? null, kcal: r.activeKcal ?? null, exMin: r.exerciseMin ?? null, rhr: r.restingHr ?? null, kcalIn: r.kcalIn ?? null, protein: r.proteinG ?? null, carbs: r.carbsG ?? null, fat: r.fatG ?? null, hrv: r.hrvMs ?? null, updatedAt: new Date().toISOString() }; if (i >= 0) health[i] = h; else health.push(h); }); health.sort((a, b) => b.date.localeCompare(a.date)); },
     async deleteAccount() { await wait(); },
     async overview() { await wait();
       return { checkins: entries.map(e => ({ client_id: e.clientId, date: e.date, coach_note: e.coachNote, created_at: e.createdAt, weight_lb: e.weight })),
@@ -348,7 +348,7 @@ function render() {
   }
   if (!S.clients.length) { app.innerHTML = welcome(); const b = $("#welcomeAdd"); if (b) b.onclick = () => openClient(null); return; }
   const c = client(); const s = series(c, S.checkins);
-  app.innerHTML = `<div class="stack">${head(c, s)}${coachCallout(c)}${healthCard(c)}${waterCard(c)}${fuelCard(c)}${scoreCard(c)}${trendsCard()}${tiles(c, s)}${s.rows.length ? calNote(c, s) : ""}${planCard(c)}${workoutsCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div>${RENOVO && !S.isTrainer ? shopCard() : ""}${acctFoot()}</div>`;
+  app.innerHTML = `<div class="stack">${head(c, s)}${coachCallout(c)}${scoreCard(c)}${healthCard(c)}${waterCard(c)}${fuelCard(c)}${trendsCard()}${tiles(c, s)}${s.rows.length ? calNote(c, s) : ""}${planCard(c)}${workoutsCard(c)}${chartCard(s)}<div class="split">${logCard(c, s)}<div class="stack">${photoCard(s)}${summaryCard(c, s)}</div></div>${RENOVO && !S.isTrainer ? shopCard() : ""}${acctFoot()}</div>`;
   wire(c, s);
   const da = $("#delAcct"); if (da) da.onclick = openDeleteAccount;
 }

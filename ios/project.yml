@@ -41,7 +41,7 @@ targets:
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         NSHealthUpdateUsageDescription: RENOVO only reads your Health data to show your progress. It never writes to or changes anything in Apple Health.
-        NSHealthShareUsageDescription: RENOVO reads your steps, sleep, weight, workouts, resting heart rate and the food you log (calories, protein, carbs and fat, for example from MyFitnessPal) so you and your coach can see your progress. You choose what to share, and you can change it anytime in the Health app.
+        NSHealthShareUsageDescription: RENOVO reads your steps, sleep, weight, workouts, resting heart rate, heart rate variability and the food you log (calories, protein, carbs and fat, for example from MyFitnessPal) so you and your coach can see your progress. You choose what to share, and you can change it anytime in the Health app.
     entitlements:
       path: Renovo/Renovo.entitlements
       properties:

@@ -151,6 +151,8 @@ alter table public.health_daily add column if not exists kcal_in   integer      
 alter table public.health_daily add column if not exists protein_g numeric(6,1) check (protein_g between 0 and 2000);
 alter table public.health_daily add column if not exists carbs_g   numeric(6,1) check (carbs_g between 0 and 3000);
 alter table public.health_daily add column if not exists fat_g     numeric(6,1) check (fat_g between 0 and 1000);
+-- Heart rate variability (SDNN, ms), daily average, for recovery scores (added October 2026).
+alter table public.health_daily add column if not exists hrv_ms    integer      check (hrv_ms between 1 and 300);
 alter table public.clients add column if not exists kcal_goal    smallint check (kcal_goal between 800 and 8000);
 alter table public.clients add column if not exists protein_goal smallint check (protein_goal between 20 and 600);
 alter table public.clients add column if not exists carbs_goal   smallint check (carbs_goal between 0 and 1000);

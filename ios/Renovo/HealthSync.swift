@@ -15,10 +15,11 @@ struct DayRow {
     var proteinG: Double?
     var carbsG: Double?
     var fatG: Double?
+    var hrvMs: Int?           // heart rate variability (SDNN), daily average
 
     var hasData: Bool {
         steps != nil || sleepHours != nil || weightLb != nil || activeKcal != nil || exerciseMin != nil || restingHr != nil
-            || kcalIn != nil || proteinG != nil || carbsG != nil || fatG != nil
+            || kcalIn != nil || proteinG != nil || carbsG != nil || fatG != nil || hrvMs != nil
     }
 
     var json: [String: Any] {
@@ -33,6 +34,7 @@ struct DayRow {
         if let v = proteinG { out["proteinG"] = v }
         if let v = carbsG { out["carbsG"] = v }
         if let v = fatG { out["fatG"] = v }
+        if let v = hrvMs { out["hrvMs"] = v }
         return out
     }
 }
@@ -53,7 +55,8 @@ final class HealthSync {
     private var readTypes: Set<HKObjectType> {
         var types: Set<HKObjectType> = []
         let quantities: [HKQuantityTypeIdentifier] = [.stepCount, .bodyMass, .activeEnergyBurned, .appleExerciseTime, .restingHeartRate,
-                                                      .dietaryEnergyConsumed, .dietaryProtein, .dietaryCarbohydrates, .dietaryFatTotal]
+                                                      .dietaryEnergyConsumed, .dietaryProtein, .dietaryCarbohydrates, .dietaryFatTotal,
+                                                      .heartRateVariabilitySDNN]
         for id in quantities {
             if let type = HKObjectType.quantityType(forIdentifier: id) { types.insert(type) }
         }
@@ -83,6 +86,7 @@ final class HealthSync {
         let protein = (try? await dailyStats(.dietaryProtein, options: .cumulativeSum, unit: .gram(), start: start, end: end)) ?? [:]
         let carbs = (try? await dailyStats(.dietaryCarbohydrates, options: .cumulativeSum, unit: .gram(), start: start, end: end)) ?? [:]
         let fat = (try? await dailyStats(.dietaryFatTotal, options: .cumulativeSum, unit: .gram(), start: start, end: end)) ?? [:]
+        let hrv = (try? await dailyStats(.heartRateVariabilitySDNN, options: .discreteAverage, unit: .secondUnit(with: .milli), start: start, end: end)) ?? [:]
 
         var rows: [DayRow] = []
         var day = start
@@ -99,7 +103,8 @@ final class HealthSync {
                 kcalIn: Self.int(food[key], within: 0...20_000),
                 proteinG: Self.round(protein[key], places: 1, within: 0...2_000),
                 carbsG: Self.round(carbs[key], places: 1, within: 0...3_000),
-                fatG: Self.round(fat[key], places: 1, within: 0...1_000)
+                fatG: Self.round(fat[key], places: 1, within: 0...1_000),
+                hrvMs: Self.int(hrv[key], within: 1...300)
             ))
             guard let next = cal.date(byAdding: .day, value: 1, to: day) else { break }
             day = next

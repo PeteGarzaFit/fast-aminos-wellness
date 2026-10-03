@@ -98,10 +98,10 @@ final class AppModel: NSObject, ObservableObject {
                 // One-time 90-day backfill for the trend charts, then the last 2 weeks on each open.
                 let backfilled = UserDefaults.standard.bool(forKey: "healthBackfill90")
                 Task {
-                    // Version 2 also reads food (MyFitnessPal etc.). Apple only asks about the new types.
-                    if UserDefaults.standard.integer(forKey: "healthAuthVersion") < 2 {
+                    // Version 2 added food (MyFitnessPal etc.), version 3 heart rate variability. Apple only asks about new types.
+                    if UserDefaults.standard.integer(forKey: "healthAuthVersion") < 3 {
                         try? await health.requestAuthorization()
-                        UserDefaults.standard.set(2, forKey: "healthAuthVersion")
+                        UserDefaults.standard.set(3, forKey: "healthAuthVersion")
                     }
                     await syncNow(days: backfilled ? 14 : 90, force: !backfilled)
                     UserDefaults.standard.set(true, forKey: "healthBackfill90")
@@ -127,7 +127,7 @@ final class AppModel: NSObject, ObservableObject {
         do {
             try await health.requestAuthorization()
             health.isConnected = true
-            UserDefaults.standard.set(2, forKey: "healthAuthVersion")
+            UserDefaults.standard.set(3, forKey: "healthAuthVersion")
             await syncNow(days: 90, force: true)
             UserDefaults.standard.set(true, forKey: "healthBackfill90")
             Reminders.requestAndScheduleWeeklyCheckIn()

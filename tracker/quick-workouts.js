@@ -305,6 +305,82 @@ window.QUICK_WORKOUTS = [
   ]
  },
  {
+  "id": "boulder-shoulders",
+  "name": "Boulder Shoulders",
+  "min": 40,
+  "focus": "Shoulders",
+  "where": "gym",
+  "level": "Intermediate",
+  "equip": [
+   "Plate-loaded shoulder press",
+   "Cable with straight bar",
+   "Dumbbells",
+   "Incline bench",
+   "Flat bench",
+   "Lateral raise machine"
+  ],
+  "desc": "Pete's shoulder day: a heavy press, then side, rear and side delts again until they're on fire. Finishes with 10 sets of 10.",
+  "items": [
+   {
+    "name": "Hammer Strength Seated Shoulder Press",
+    "sets": "5",
+    "reps": "15/12/10/10/10",
+    "rest": "2 min",
+    "note": "Add weight as the reps drop. No machine? Seated dumbbell press.",
+    "ref": "shoulders",
+    "ss": "A",
+    "tempo": "3/0/1/0"
+   },
+   {
+    "name": "Straight Bar Wide Cable Upright Row",
+    "sets": "4",
+    "reps": "15",
+    "rest": "60 sec",
+    "note": "Wide grip, pull to chest height, elbows lead. Squeeze 1 second at the top.",
+    "ref": "shoulders",
+    "ss": "B",
+    "tempo": "2/0/1/1"
+   },
+   {
+    "name": "Lying Incline DB Lateral Raise",
+    "sets": "4",
+    "reps": "12",
+    "rest": "none",
+    "note": "Lie on your side on an incline bench, raise one arm at a time. Go straight to C2.",
+    "ref": "shoulders",
+    "ss": "C"
+   },
+   {
+    "name": "Standing DB Side Lateral Raise",
+    "sets": "4",
+    "reps": "20",
+    "rest": "60 sec",
+    "note": "Lighter dumbbells, constant tension.",
+    "ref": "shoulders",
+    "ss": "C"
+   },
+   {
+    "name": "Seated Rear Delt Fly",
+    "sets": "4",
+    "reps": "15",
+    "rest": "60 sec",
+    "note": "Chest on your thighs or a bench. Pause 1 second at the top.",
+    "ref": "shoulders",
+    "ss": "D",
+    "tempo": "2/1/2/0"
+   },
+   {
+    "name": "Standing Side Lateral Raise Machine",
+    "sets": "10",
+    "reps": "10",
+    "rest": "30 sec",
+    "note": "10 sets of 10 with just 30 seconds of rest. Pick a weight you can finish all 10 sets with. No machine? Cable or dumbbell lateral raises.",
+    "ref": "shoulders",
+    "ss": "E"
+   }
+  ]
+ },
+ {
   "id": "shoulders",
   "name": "Shoulder Sculpt",
   "min": 30,

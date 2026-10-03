@@ -1217,7 +1217,7 @@ function openOD(c, id) {
     const w = OD.sel && odList().find(x => x.id === OD.sel);
     if (w) {
       d.innerHTML = `<div class="od-in"><div class="od-top"><button type="button" class="linkbtn" data-back>← All workouts</button><button type="button" class="linkbtn" data-x>Close</button></div>
-        <div class="kicker">On Demand</div><h3>${esc(w.name)}</h3><p class="muted small od-meta">${odMeta(w)}${w.level ? ` · ${esc(w.level)}` : ""}</p>${w.desc ? `<p class="od-desc">${esc(w.desc)}</p>` : ""}${w.equip ? `<p class="small od-eq"><b>Equipment:</b> ${w.equip.map(esc).join(" · ")}</p>` : ""}${w.items.some(x => x.tempo) ? `<p class="small muted od-eq">Tempo numbers are seconds: lowering / pause at the bottom / lifting / pause at the top. 4/0/1/0 means a slow 4-second lowering and a quick lift.</p>` : ""}
+        <div class="kicker">On Demand</div><h3>${esc(w.name)}</h3><p class="muted small od-meta">${odMeta(w)}${w.level ? ` · ${esc(w.level)}` : ""}</p>${w.desc ? `<p class="od-desc">${esc(w.desc)}</p>` : ""}${w.equip ? `<p class="small od-eq"><b>Equipment:</b> ${w.equip.map(esc).join(" · ")}</p>` : ""}${w.items.some(x => x.tempo) ? (() => { const t = w.items.find(x => x.tempo).tempo, n = String(t).split("/"); return `<p class="small muted od-eq">Tempo numbers are seconds: lowering / pause at the bottom / lifting / pause at the top. ${esc(t)} means ${esc(n[0])} seconds down${+n[1] ? `, a ${esc(n[1])}-second pause` : ", no pause"}, then ${esc(n[2])} second${n[2] === "1" ? "" : "s"} up.</p>`; })() : ""}
         <ol class="plist">${w.items.map((x, xi) => { const pics = exPics(x.name, x.ref), sr = [x.sets ? `${esc(x.sets)} × ${esc(x.reps || "")}` : esc(x.reps || ""), esc(tempoTxt(x)), x.rest && !noRest(x.rest) ? `rest ${esc(x.rest)}` : ""].filter(Boolean).join(" · ");
           return `<li${pics ? ` class="haspic"` : ""}>${pics}<div class="ptxt"><div class="pname">${x.ss ? `<span class="sstag">${esc(ssLabel(w.items, xi))}</span> ` : ""}${esc(x.name)}</div>${sr ? `<div class="psr">${sr}</div>` : ""}${x.note ? `<div class="pnote">${esc(x.note)}</div>` : ""}</div></li>`; }).join("")}</ol>
         <button type="button" class="btn primary wide od-go" data-go>${S.isTrainer ? `Log it for ${esc(firstName(c.name))}` : "Start workout"}</button></div>`;
@@ -2027,6 +2027,9 @@ const isClock = x => x.log === "time";
 const isTimed = x => !isClock(x) && /min|sec|yard|yd\b/i.test(String(x.reps || ""));
 /* 75 → "1:15", 3725 → "1:02:05" */
 const fmtTime = t => { t = Math.max(0, Math.round(t)); const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s2 = String(t % 60).padStart(2, "0"); return h ? `${h}:${String(m).padStart(2, "0")}:${s2}` : `${m}:${s2}`; };
+/* Reps that change set to set, written "15/12/10/10/10". */
+const repsBySet = x => /^\s*\d+(\s*\/\s*\d+)+\s*$/.test(String(x.reps || "")) ? String(x.reps).split("/").map(n => +n) : null;
+const repFor = (x, si) => { const r = repsBySet(x); return r ? r[Math.min(si, r.length - 1)] : topRep(x); };
 const topRep = x => { const n = String(x.reps || "").match(/\d+/g); return n ? Math.max(...n.map(Number)) : null; };
 const nSets = x => Math.min(10, Math.max(1, parseInt(x.sets, 10) || 3));
 const fmtSet = st => st.sec != null ? `${fmtTime(st.sec)}${st.lb ? ` @ ${f1(st.lb).replace(/\.0$/, "")} lb` : ""}` : `${st.lb != null ? f1(st.lb).replace(/\.0$/, "") : "BW"} × ${st.reps ?? "–"}`;
@@ -2047,7 +2050,7 @@ function progressHint(x, prev) {
   if (isClock(x)) { if (!prev) return ""; const b = Math.min(...prev.e.sets.filter(st => st.sec).map(st => st.sec)); return isFinite(b) && prev.e.target === targetOf(x) ? `<div class="hint up">Best last time: ${fmtTime(b)}. Try to beat it.</div>` : ""; }
   if (x.deload) return `<div class="hint">Deload week: use about 85–90% of last week's weight and leave plenty in the tank. This is when you recover and get stronger.</div>`;
   if (x.peak && x.kind === "main") return `<div class="hint up">PR week: warm up well, then go for your best set. Stop if form breaks down.</div>`;
-  if (!prev) return "";
+  if (!prev || repsBySet(x)) return "";
   const top = topRep(x), done = prev.e.sets.filter(st => st.reps != null);
   if (top && done.length >= nSets(x) && done.every(st => st.reps >= top)) return `<div class="hint up">You hit ${top} reps on every set last time. Add a little weight today (about 5 lb).</div>`;
   return "";
@@ -2113,7 +2116,7 @@ function drawWorkout() {
     }
     const rows = e.sets.map((st, si) => `<div class="wset"><span class="snum">Set ${si + 1}</span>
       <label class="wf"><input type="number" inputmode="decimal" step="2.5" min="0" max="2000" data-e="${ei}" data-s="${si}" enterkeyhint="next" data-k="lb" value="${esc(st.lb)}" placeholder="${ph[si] ?? ph[ph.length - 1] ?? ""}" aria-label="${esc(e.name)} set ${si + 1} weight"><span>lb</span></label>
-      <label class="wf"><input type="number" inputmode="numeric" step="1" min="0" max="200" data-e="${ei}" data-s="${si}" data-k="reps" value="${esc(st.reps)}" placeholder="${topRep(x) ?? ""}" aria-label="${esc(e.name)} set ${si + 1} reps"><span>reps</span></label></div>`).join("");
+      <label class="wf"><input type="number" inputmode="numeric" step="1" min="0" max="200" data-e="${ei}" data-s="${si}" data-k="reps" value="${esc(st.reps)}" placeholder="${repFor(x, si) ?? ""}" aria-label="${esc(e.name)} set ${si + 1} reps"><span>reps</span></label></div>`).join("");
     return `<div class="wex">${head}${x.note ? `<div class="pnote">${esc(x.note)}</div>` : ""}${last}${progressHint(x, prev)}${rows}<button type="button" class="linkbtn addset" data-addset="${ei}">+ Add a set</button></div>`;
   }).join("") + `<div class="wtotal" id="wTotal"${wDraft.entries.filter(e => e.clock).length > 1 ? "" : " hidden"}></div>`;
   drawTotal();

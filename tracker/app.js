@@ -1156,13 +1156,20 @@ function weekDays() {
   return Array.from({ length: 7 }, (_, i) => { const d = new Date(mon); d.setDate(mon.getDate() + i); return isoOf(d); });
 }
 /* Status of one calendar day against the plan: done, missed, today, planned, rest. */
+/* On Demand workouts are saved with program "od:<id>" (older ones are matched by name). */
+const isOD = w => /^od:/.test(w.program || "") || (!w.program && (window.QUICK_WORKOUTS || []).some(q => q.name === w.dayName));
 function dayStatus(p, iso) {
-  const t = todayISO(), i = planDayFor(p, iso), done = S.workouts.find(w => w.date === iso);
-  if (done) return { st: "done", i, w: done };
-  if (i == null || i < 0 || isRestDay(p.days[i])) return { st: "rest", i };
-  if (iso === t) return { st: "today", i };
-  if (iso < t && iso >= planStart(p)) return { st: "missed", i };
-  return { st: iso < t ? "rest" : "planned", i };
+  const t = todayISO(), i = planDayFor(p, iso), all = S.workouts.filter(w => w.date === iso);
+  // Any workout completes the day (On Demand counts too); od marks it so the calendar can show it in orange.
+  const done = all.find(w => !isOD(w)) || all[0], od = all.find(isOD);
+  if (done) return { st: "done", i, w: done, od, odOnly: isOD(done) };
+  const r = (() => {
+    if (i == null || i < 0 || isRestDay(p.days[i])) return { st: "rest", i };
+    if (iso === t) return { st: "today", i };
+    if (iso < t && iso >= planStart(p)) return { st: "missed", i };
+    return { st: iso < t ? "rest" : "planned", i };
+  })();
+  return od ? { ...r, od } : r;
 }
 /* Planned workouts done in a row, counting back from the most recent one (rest days don't break it). */
 function workoutStreak(p) {
@@ -1178,19 +1185,22 @@ function workoutStreak(p) {
 function weekStrip(c) {
   const p = S.plan; if (!p || !p.days.length || S.workoutsMissing || planDayFor(p, todayISO()) == null) return "";
   const days = weekDays(), t = todayISO(), xs = days.map(d => ({ d, ...dayStatus(p, d) }));
-  const planned = xs.filter(x => x.st !== "rest" || x.w).length, done = xs.filter(x => x.st === "done").length, streak = workoutStreak(p);
-  const ic = { done: "✓", missed: "✕", today: "", planned: "", rest: "" };
+  const sched = x => x.i != null && x.i >= 0 && !isRestDay(p.days[x.i]);
+  const planned = xs.filter(sched).length, done = xs.filter(x => sched(x) && x.st === "done").length, streak = workoutStreak(p);
+  const ic = { done: "✓", missed: "✕", today: "", planned: "", rest: "" }, odN = xs.filter(x => x.od).length;
   const cells = xs.map(x => { const dt = toDate(x.d);
     const nm = x.i != null && x.i >= 0 ? shortDay(p.days[x.i].name) : "Rest";
-    return `<button type="button" class="wk-d ${x.st}${x.d === t ? " now" : ""}" data-wk="${x.d}" aria-label="${dt.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}: ${esc(x.st === "done" ? "done" : x.st === "missed" ? "missed, " + nm : nm)}">
-      <span class="wk-n">${dt.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase()}</span><span class="wk-dot">${ic[x.st]}</span><span class="wk-date">${dt.getDate()}</span></button>`; }).join("");
+    const odOnly = !!x.odOnly || (x.od && x.st !== "done");
+    return `<button type="button" class="wk-d ${x.st}${odOnly ? " odonly" : ""}${x.d === t ? " now" : ""}" data-wk="${x.d}" aria-label="${dt.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}: ${esc(x.st === "done" ? "done" : x.st === "missed" ? "missed, " + nm : nm)}${x.od ? ", On Demand workout done" : ""}">
+      <span class="wk-n">${dt.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase()}</span><span class="wk-dot">${odOnly ? "⚡" : ic[x.st]}${x.od && !odOnly ? `<i class="wk-pip"></i>` : ""}</span><span class="wk-date">${dt.getDate()}</span></button>`; }).join("");
   return `<section class="card wk"><div class="wk-row">${cells}</div>
-    <div class="wk-foot"><span>${streak >= 2 ? `🔥 <b>${streak}</b> workouts in a row` : "Every workout counts"}</span><span class="muted">${done} of ${planned} this week</span></div></section>`;
+    <div class="wk-foot"><span>${streak >= 2 ? `🔥 <b>${streak}</b> workouts in a row` : "Every workout counts"}</span><span class="muted">${done} of ${planned} this week${odN ? ` · <span class="wk-odn">⚡${odN}</span>` : ""}</span></div>
+    <div class="wk-key"><span><i class="k-plan"></i>Program</span><span><i class="k-od"></i>On Demand</span><span><i class="k-miss"></i>Missed</span></div></section>`;
 }
 function weekTap(c, iso) {
   const p = S.plan, x = dayStatus(p, iso), dt = toDate(iso).toLocaleDateString("en-US", { weekday: "long" });
-  if (x.st === "done") return toast(`${dt}: ${shortDay(x.w.dayName)} done ✓`);
-  if (x.st === "rest") return toast(`${dt}: rest day`);
+  if (x.st === "done") return toast(x.odOnly ? `${dt}: ⚡ ${x.w.dayName} (On Demand) done${x.i != null && x.i >= 0 && !isRestDay(p.days[x.i]) ? ` instead of ${shortDay(p.days[x.i].name)}` : ""}` : `${dt}: ${shortDay(x.w.dayName)} done ✓`);
+  if (x.st === "rest") return toast(x.od ? `${dt}: ⚡ ${x.od.dayName} (On Demand)` : `${dt}: rest day`);
   if (S.workoutsMissing) return;
   if (x.st === "planned") return toast(`${dt}: ${shortDay(p.days[x.i].name)} · ${dayItems(p.days[x.i], p.program, progWeek(p.program)).length} exercises`);
   openWorkout(c, x.i);
@@ -1240,7 +1250,7 @@ function openOD(c, id) {
     if (b.dataset.focus) OD.focus = b.dataset.focus;
     if (b.dataset.pick) { OD.sel = b.dataset.pick; draw(); d.scrollTop = 0; return; }
     if (b.dataset.go != null) { const w = odList().find(x => x.id === OD.sel); d.close();
-      startLogger(c, { dayName: w.name, items: JSON.parse(JSON.stringify(w.items)), fixedWhere: w.where === "both" ? null : w.where }); return; }
+      startLogger(c, { dayName: w.name, items: JSON.parse(JSON.stringify(w.items)), fixedWhere: w.where === "both" ? null : w.where, program: `od:${w.id}` }); return; }
     draw();
   };
   draw(); if (!d.open) d.showModal(); d.scrollTop = 0;
@@ -1590,7 +1600,7 @@ function badgeList(c) {
   Object.keys(wk).sort().forEach(k => { if (wk[k] < perWeek) { run = 0; prev = k; return; } run = prev && days(prev, k) === 7 && run ? run + 1 : 1; bestStreak = Math.max(bestStreak, run); prev = k; });
   [2, 4, 8, 12, 26].forEach(n => add("st" + n, "🔥", `${n}-week streak`, `Every planned workout, ${n} weeks in a row`, bestStreak, n));
   // Programs
-  const runs = {}; S.workouts.forEach(w => { if (w.program) runs[w.program] = (runs[w.program] || 0) + 1; });
+  const runs = {}; S.workouts.forEach(w => { if (w.program && !isOD(w)) runs[w.program] = (runs[w.program] || 0) + 1; });
   const cur = S.plan && S.plan.program ? progKey(S.plan.program) : "";
   if (cur && !runs[cur]) runs[cur] = 0;
   Object.entries(runs).forEach(([k, n]) => { const [name, start, weeks, dpw] = k.split("|"), total = Math.max(1, Math.round((+weeks || 6) * (+dpw || perWeek) * 0.8));

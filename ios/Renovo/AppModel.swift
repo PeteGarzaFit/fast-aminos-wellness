@@ -225,6 +225,13 @@ final class WeakScriptHandler: NSObject, WKScriptMessageHandler {
 // MARK: - Navigation: tracker pages stay in the app, other links open in Safari
 
 extension AppModel: WKNavigationDelegate, WKUIDelegate {
+    /// The app itself is the tracker; only its own pages replace what's on screen.
+    private static func isTrackerPage(_ url: URL) -> Bool {
+        let scheme = url.scheme?.lowercased() ?? ""
+        if scheme == "about" || scheme == "blob" || scheme == "data" { return true }
+        return url.path.hasPrefix("/tracker")
+    }
+
     private func opensInApp(_ url: URL) -> Bool {
         guard let scheme = url.scheme?.lowercased() else { return false }
         if scheme == "about" || scheme == "blob" || scheme == "data" { return true }
@@ -237,8 +244,16 @@ extension AppModel: WKNavigationDelegate, WKUIDelegate {
         guard let url = navigationAction.request.url else { decisionHandler(.cancel); return }
         // Only top-level page loads are checked; images, scripts and the sign-in service load normally.
         let isMainFrame = navigationAction.targetFrame?.isMainFrame ?? true
-        if !isMainFrame || opensInApp(url) {
+        if !isMainFrame || (opensInApp(url) && Self.isTrackerPage(url)) {
             decisionHandler(.allow)
+        } else if opensInApp(url), url.scheme?.lowercased() == "https", let top = Self.topViewController() {
+            // Other pages of our own site (home page, calculator) open in a sheet with a Done button,
+            // so the app can never get stuck on the website.
+            let sheet = SFSafariViewController(url: url)
+            sheet.preferredControlTintColor = UIColor(red: 0.086, green: 0.514, blue: 1.0, alpha: 1)
+            sheet.dismissButtonStyle = .done
+            top.present(sheet, animated: true)
+            decisionHandler(.cancel)
         } else {
             UIApplication.shared.open(url)
             decisionHandler(.cancel)

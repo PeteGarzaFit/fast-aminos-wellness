@@ -351,7 +351,13 @@ const RENOVO = IN_APP || new URLSearchParams(location.search).get("brand") === "
 if (IN_APP) { const vp = document.querySelector('meta[name="viewport"]'); if (vp) vp.content = "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"; }
 if (RENOVO) {
   document.documentElement.classList.add("renovo");
-  const brand = document.querySelector(".brand"); if (brand) brand.innerHTML = `<span class="rv-logo">RENOVO<span>COACH</span></span>`;
+  const brand = document.querySelector(".brand");
+  if (brand) {
+    brand.innerHTML = `<span class="rv-logo">RENOVO<span>COACH</span></span>`;
+    // In RENOVO the logo is just a "back to top" button; it never leaves the app.
+    brand.setAttribute("href", "#"); brand.setAttribute("aria-label", "RENOVO Coach, back to top");
+    brand.addEventListener("click", ev => { ev.preventDefault(); window.scrollTo({ top: 0, behavior: "smooth" }); });
+  }
   const sub = document.querySelector(".brand-sub"); if (sub) sub.textContent = "Renew your body. Rebuild your life.";
   document.title = "RENOVO COACH";
 }

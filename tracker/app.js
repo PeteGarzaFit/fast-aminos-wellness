@@ -590,7 +590,7 @@ function head(c, s) {
   const linked = S.isTrainer ? (c.userId ? ` · <span title="${esc(c.email)}">Signed in</span>` : ` · <span title="${esc(c.email)}">Hasn't signed in yet</span>`) : "";
   return `<div class="chead"><div class="grow">${S.isTrainer ? "" : `<div class="kicker">Your progress</div>`}<h1>${esc(c.name)}</h1>
     <div class="meta">${esc(bits)}${c.goal ? ` · Goal: ${esc(c.goal)}` : ""}${linked}</div>${pill}</div>
-    <div class="actions">${msgButton(c)}${calcLink(c, s)}${S.isTrainer ? `<button class="btn" id="editClient" type="button">Edit client</button><button class="btn${c.active ? "" : " primary"}" id="toggleActive" type="button">${c.active ? "Pause coaching" : "Resume coaching"}</button>` : ""}<button class="btn primary" id="newEntry" type="button">${S.isTrainer ? "New check-in" : "Log check-in"}</button></div></div>`;
+    <div class="actions">${msgButton(c)}${S.isTrainer ? calcLink(c, s) : ""}${S.isTrainer ? `<button class="btn" id="editClient" type="button">Edit client</button><button class="btn${c.active ? "" : " primary"}" id="toggleActive" type="button">${c.active ? "Pause coaching" : "Resume coaching"}</button>` : ""}<button class="btn primary" id="newEntry" type="button">${S.isTrainer ? "New check-in" : "Log check-in"}</button></div></div>`;
 }
 
 /* Opens the public calculator pre-filled with this client's latest numbers. */
